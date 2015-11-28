@@ -291,11 +291,15 @@ def store(connection, type, record, id=None, params=None):
         resp = _do_post(url, connection, data=json.dumps(record))
     return resp
 
-def bulk(connection, type, records, idkey='id'):
+def to_bulk(records, idkey="id"):
     data = ''
     for r in records:
         data += json.dumps( {'index':{'_id':r[idkey]}} ) + '\n'
         data += json.dumps( r ) + '\n'
+    return data
+
+def bulk(connection, type, records, idkey='id'):
+    data = to_bulk(records, idkey=idkey)
     url = elasticsearch_url(connection, type, endpoint="_bulk")
     resp = _do_post(url, connection, data=data)
     return resp
