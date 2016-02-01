@@ -320,6 +320,18 @@ def delete_by_query(connection, type, query, es_version="0.90.13"):
     resp = _do_delete(url, connection, data=json.dumps(query))
     return resp
 
+def to_bulk_del(ids):
+    data = ''
+    for i in ids:
+        data += json.dumps( {'delete':{'_id':i}} ) + '\n'
+    return data
+
+def bulk_delete(connection, type, ids):
+    data = to_bulk_del(ids)
+    url = elasticsearch_url(connection, type, endpoint="_bulk")
+    resp = _do_post(url, connection, data=data)
+    return resp
+
 ##############################################################
 ## Refresh
 
