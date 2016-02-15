@@ -10,7 +10,120 @@ class StoreException(Exception):
         return repr(self.value)
 
 class DAO(object):
-    
+
+    def __init__(self, raw=None):
+        try:
+            object.__getattribute__(self, "data")
+        except:
+            self.data = {} if raw is None else raw
+        super(DAO, self).__init__()
+
+    @property
+    def id(self):
+        return self.data.get('id', None)
+
+    @id.setter
+    def id(self, val):
+        self.data["id"] = val
+
+    @property
+    def created_date(self):
+        return self.data.get("created_date")
+
+    @created_date.setter
+    def created_date(self, val):
+        self.data["created_date"] = val
+
+    @property
+    def last_updated(self):
+        return self.data.get("last_updated")
+
+    @last_updated.setter
+    def last_updated(self, val):
+        self.data["last_updated"] = val
+
+    @property
+    def json(self):
+        return json.dumps(self.data)
+
+    @property
+    def raw(self):
+        return self.data
+
+    def save(self, conn=None, makeid=True, created=True, updated=True, blocking=False, type=None):
+        if conn is None:
+            conn = self._get_connection()
+
+        if type is None:
+            type = self._get_write_type()
+
+        if blocking and not updated:
+            raise StoreException("Unable to do blocking save on record where last_updated is not set")
+
+        now = util.now()
+        if blocking:
+            # we need the new last_updated time to be later than the new one
+            if now == self.last_updated:
+                time.sleep(1)   # timestamp granularity is seconds, so just sleep for 1
+            now = util.now()    # update the new timestamp
+
+        # the main body of the save
+        if makeid:
+            if "id" not in self.data:
+                self.id = self.makeid()
+        if created:
+            if 'created_date' not in self.data:
+                self.data['created_date'] = now
+        if updated:
+            self.data['last_updated'] = now
+
+        raw.store(conn, type, self.data, self.id)
+
+        if blocking:
+            q = {
+                "query" : {
+                    "term" : {"id.exact" : self.id}
+                },
+                "fields" : ["last_updated"]
+            }
+            while True:
+                res = raw.search(conn, type, q)
+                j = raw.unpack_result(res)
+                if len(j) == 0:
+                    time.sleep(0.5)
+                    continue
+                if len(j) > 1:
+                    raise StoreException("More than one record with id {x}".format(x=self.id))
+                if j[0].get("last_updated")[0] == now:  # NOTE: only works on ES > 1.x
+                    break
+                else:
+                    time.sleep(0.5)
+                    continue
+
+    def delete(self, conn=None, type=None):
+        if conn is None:
+            conn = self._get_connection()
+
+        # the record may be in any one of the read types, so we need to check them all
+        types = []
+        if type is not None:
+            if isinstance(type, list):
+                types = type
+            else:
+                types = [type]
+        else:
+            types = self._get_read_types()
+
+        # in the simple case of one type, just get on and issue the delete
+        if len(types) == 1:
+            raw.delete(conn, types[0], self.id)
+
+        # otherwise, check all the types until we find the object, then issue the delete there
+        for t in types:
+            o = raw.get(conn, t, self.id)
+            if o is not None:
+                raw.delete(conn, t, self.id)
+
     @classmethod
     def makeid(cls):
         return uuid.uuid4().hex
@@ -40,13 +153,38 @@ class DAO(object):
         if "record" not in obj:
             raise StoreException("no record provided for store action")
         raw.store(conn, obj.get("index"), obj.get("record"), obj.get("id"))
+
+    ##################################################
+    # if you are subclassing, you need to implement these
+
+    def _get_connection(self):
+        raise NotImplementedError()
+
+    def _get_write_type(self):
+        raise NotImplementedError()
+
+    def _get_read_types(self):
+        raise NotImplementedError()
     
 class DomainObject(DAO):
     __type__ = None
     __conn__ = None
     
     def __init__(self, raw=None):
-        self.data = raw if raw is not None else {}
+        super(DomainObject, self).__init__(raw=raw)
+
+    def _get_connection(self):
+        return self.__conn__
+
+    ################################################
+    # somewhat messy type system
+
+    # overrides of the instantiated DAO methods
+    def _get_write_type(self):
+        return self.get_write_type()
+
+    def _get_read_types(self):
+        return self.get_read_types()
 
     @classmethod
     def dynamic_read_types(cls):
@@ -78,38 +216,9 @@ class DomainObject(DAO):
             return dwt
         return cls.__type__
 
-    @property
-    def id(self):
-        return self.data.get('id', None)
-        
-    @id.setter
-    def id(self, val):
-        self.data["id"] = val
+    # End of type system
+    ################################################
 
-    @property
-    def created_date(self):
-        return self.data.get("created_date")
-
-    @created_date.setter
-    def created_date(self, val):
-        self.data["created_date"] = val
-
-    @property
-    def last_updated(self):
-        return self.data.get("last_updated")
-
-    @last_updated.setter
-    def last_updated(self, val):
-        self.data["last_updated"] = val
-
-    @property
-    def json(self):
-        return json.dumps(self.data)
-    
-    @property
-    def raw(self):
-        return self.data
-    
     @classmethod
     def refresh(cls, conn=None):
         if conn is None:
@@ -221,76 +330,11 @@ class DomainObject(DAO):
         return r.json()
 
     @classmethod
-    def object_query(cls, q='', terms=None, should_terms=None, facets=None, conn=None, types=None, **kwargs):
+    def object_query(cls, q='', terms=None, should_terms=None, facets=None, conn=None, types=None, wrap=True, **kwargs):
         j = cls.query(q=q, terms=terms, should_terms=should_terms, facets=facets, conn=conn, types=types, **kwargs)
         res = raw.unpack_json_result(j)
-        return [cls(r) for r in res]
+        return [cls(r) if wrap else r for r in res]
 
-    def save(self, conn=None, makeid=True, created=True, updated=True, blocking=False, type=None):
-        if conn is None:
-            conn = self.__conn__
-
-        type = self.get_write_type(type)
-
-        if blocking and not updated:
-            raise StoreException("Unable to do blocking save on record where last_updated is not set")
-
-        now = util.now()
-        if blocking:
-            # we need the new last_updated time to be later than the new one
-            if now == self.last_updated:
-                time.sleep(1)   # timestamp granularity is seconds, so just sleep for 1
-            now = util.now()    # update the new timestamp
-
-        # the main body of the save
-        if makeid:
-            if "id" not in self.data:
-                self.id = self.makeid()
-        if created:
-            if 'created_date' not in self.data:
-                self.data['created_date'] = now
-        if updated:
-            self.data['last_updated'] = now
-
-        raw.store(conn, type, self.data, self.id)
-
-        if blocking:
-            q = {
-                "query" : {
-                    "term" : {"id.exact" : self.id}
-                },
-                "fields" : ["last_updated"]
-            }
-            while True:
-                res = raw.search(conn, type, q)
-                j = raw.unpack_result(res)
-                if len(j) == 0:
-                    time.sleep(0.5)
-                    continue
-                if len(j) > 1:
-                    raise StoreException("More than one record with id {x}".format(x=self.id))
-                if j[0].get("last_updated")[0] == now:  # NOTE: only works on ES > 1.x
-                    break
-                else:
-                    time.sleep(0.5)
-                    continue
-        
-    def delete(self, conn=None, type=None):
-        if conn is None:
-            conn = self.__conn__
-
-        # the record may be in any one of the read types, so we need to check them all
-        types = self.get_read_types(type)
-
-        # in the simple case of one type, just get on and issue the delete
-        if len(types) == 1:
-            raw.delete(conn, types[0], self.id)
-
-        # otherwise, check all the types until we find the object, then issue the delete there
-        for t in types:
-            o = raw.get(conn, t, self.id)
-            if o is not None:
-                raw.delete(conn, t, self.id)
 
     @classmethod
     def delete_by_query(cls, query, conn=None, es_version="0.90.13", type=None):
@@ -341,7 +385,7 @@ class DomainObject(DAO):
         return res.get("hits", {}).get("total")
 
     @classmethod
-    def scroll(cls, q=None, page_size=1000, limit=None, keepalive="1m", conn=None, raise_on_scroll_error=True, types=None):
+    def scroll(cls, q=None, page_size=1000, limit=None, keepalive="1m", conn=None, raise_on_scroll_error=True, types=None, wrap=True):
         if conn is None:
             conn = cls.__conn__
         types = cls.get_read_types(types)
@@ -353,7 +397,10 @@ class DomainObject(DAO):
 
         try:
             for o in gen:
-                yield cls(o)
+                if wrap:
+                    yield cls(o)
+                else:
+                    yield o
         except tasks.ScrollException as e:
             if raise_on_scroll_error:
                 raise e
