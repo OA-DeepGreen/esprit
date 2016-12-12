@@ -50,7 +50,7 @@ class DAO(object):
     def raw(self):
         return self.data
 
-    def save(self, conn=None, makeid=True, created=True, updated=True, blocking=False, type=None):
+    def save(self, conn=None, makeid=True, created=True, updated=True, blocking=False, type=None, max_wait=False):
         if conn is None:
             conn = self._get_connection()
 
@@ -86,11 +86,15 @@ class DAO(object):
                 },
                 "fields" : ["last_updated"]
             }
+            waited = 0.0
             while True:
+                if max_wait is not False and waited >= max_wait:
+                    break
                 res = raw.search(conn, type, q)
                 j = raw.unpack_result(res)
                 if len(j) == 0:
                     time.sleep(0.5)
+                    waited += 0.5
                     continue
                 if len(j) > 1:
                     raise StoreException("More than one record with id {x}".format(x=self.id))
@@ -98,6 +102,7 @@ class DAO(object):
                     break
                 else:
                     time.sleep(0.5)
+                    waited += 0.5
                     continue
 
     def delete(self, conn=None, type=None):
