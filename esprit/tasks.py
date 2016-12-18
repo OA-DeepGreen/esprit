@@ -18,7 +18,7 @@ def copy(source_conn, source_type, target_conn, target_type, limit=None, batch_s
         print "writing batch of", len(batch)
         raw.bulk(target_conn, target_type, batch)
 
-def scroll(conn, type, q=None, page_size=1000, limit=None, keepalive="1m"):
+def scroll(conn, type, q=None, page_size=1000, limit=None, keepalive="1m", keyword_subfield="exact"):
     if q is not None:
         q = q.copy()
     if q is None:
@@ -26,7 +26,7 @@ def scroll(conn, type, q=None, page_size=1000, limit=None, keepalive="1m"):
     if "size" not in q:
         q["size"] = page_size
     if "sort" not in q: # to ensure complete coverage on a changing index, sort by id is our best bet
-        q["sort"] = [{"id" : {"order" : "asc"}}]
+        q["sort"] = [{"id." + keyword_subfield : {"order" : "asc"}}]
 
     resp = raw.initialise_scroll(conn, type, q, keepalive)
     if resp.status_code != 200:
@@ -63,12 +63,12 @@ def scroll(conn, type, q=None, page_size=1000, limit=None, keepalive="1m"):
             counter += 1
             yield r
 
-def iterate(conn, type, q, page_size=1000, limit=None, method="POST"):
+def iterate(conn, type, q, page_size=1000, limit=None, method="POST", keyword_subfield="exact"):
     q = q.copy()
     q["size"] = page_size
     q["from"] = 0
     if "sort" not in q: # to ensure complete coverage on a changing index, sort by id is our best bet
-        q["sort"] = [{"id" : {"order" : "asc"}}]
+        q["sort"] = [{"id." + keyword_subfield : {"order" : "asc"}}]
     counter = 0
     while True:
         # apply the limit

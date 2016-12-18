@@ -1,5 +1,5 @@
 import uuid, json
-from esprit import raw, util, tasks
+from esprit import raw, util, tasks, versions
 from copy import deepcopy
 import time
 
@@ -10,12 +10,18 @@ class StoreException(Exception):
         return repr(self.value)
 
 class DAO(object):
+    __es_version__ = "1.7.5"
 
     def __init__(self, raw=None):
         try:
             object.__getattribute__(self, "data")
         except:
             self.data = {} if raw is None else raw
+        try:
+            object.__getattribute__(self, "_es_version")
+        except:
+            self._es_version = self.__es_version__
+
         super(DAO, self).__init__()
 
     @property
@@ -77,33 +83,67 @@ class DAO(object):
         if updated:
             self.data['last_updated'] = now
 
-        raw.store(conn, type, self.data, self.id)
+        resp = raw.store(conn, type, self.data, self.id)
+        if resp.status_code < 200 or resp.status_code >= 400:
+            raise raw.ESWireException(resp)
 
         if blocking:
-            q = {
-                "query" : {
-                    "term" : {"id.exact" : self.id}
-                },
-                "fields" : ["last_updated"]
-            }
-            waited = 0.0
-            while True:
-                if max_wait is not False and waited >= max_wait:
-                    break
-                res = raw.search(conn, type, q)
-                j = raw.unpack_result(res)
-                if len(j) == 0:
-                    time.sleep(0.5)
-                    waited += 0.5
-                    continue
-                if len(j) > 1:
-                    raise StoreException("More than one record with id {x}".format(x=self.id))
-                if j[0].get("last_updated")[0] == now:  # NOTE: only works on ES > 1.x
-                    break
-                else:
-                    time.sleep(0.5)
-                    waited += 0.5
-                    continue
+            if versions.fields_query(self._es_version):
+                self._es_field_block(conn, type, now)
+            else:
+                self._es_source_block(conn, type, now)
+
+    def _es_field_block(self, conn, type, now, max_wait=False):
+        q = {
+            "query" : {
+                "term" : {"id.exact" : self.id}
+            },
+            "fields" : ["last_updated"]
+        }
+        waited = 0.0
+        while True:
+            if max_wait is not False and waited >= max_wait:
+                break
+            res = raw.search(conn, type, q)
+            j = raw.unpack_result(res)
+            if len(j) == 0:
+                time.sleep(0.5)
+                waited += 0.5
+                continue
+            if len(j) > 1:
+                raise StoreException("More than one record with id {x}".format(x=self.id))
+            if j[0].get("last_updated")[0] == now:  # NOTE: only works on ES > 1.x
+                break
+            else:
+                time.sleep(0.5)
+                waited += 0.5
+                continue
+
+    def _es_source_block(self, conn, type, now, max_wait=False):
+        q = {
+            "query" : {
+                "term" : {"id" : self.id}
+            },
+            "_source" : ["last_updated"]
+        }
+        waited = 0.0
+        while True:
+            if max_wait is not False and waited >= max_wait:
+                break
+            res = raw.search(conn, type, q)
+            j = raw.unpack_result(res)
+            if len(j) == 0:
+                time.sleep(0.5)
+                waited += 0.5
+                continue
+            if len(j) > 1:
+                raise StoreException("More than one record with id {x}".format(x=self.id))
+            if j[0].get("last_updated") == now:
+                break
+            else:
+                time.sleep(0.5)
+                waited += 0.5
+                continue
 
     def delete(self, conn=None, type=None):
         if conn is None:
@@ -350,12 +390,12 @@ class DomainObject(DAO):
         raw.delete_by_query(conn, type, query, es_version=es_version)
 
     @classmethod
-    def iterate(cls, q, page_size=1000, limit=None, wrap=True, **kwargs):
+    def iterate(cls, q, page_size=1000, limit=None, wrap=True, keyword_subfield="exact", **kwargs):
         q = q.copy()
         q["size"] = page_size
         q["from"] = 0
         if "sort" not in q: # to ensure complete coverage on a changing index, sort by id is our best bet
-            q["sort"] = [{"id" : {"order" : "asc"}}]
+            q["sort"] = [{"id." + keyword_subfield : {"order" : "asc"}}]
         counter = 0
         while True:
             # apply the limit

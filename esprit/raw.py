@@ -2,12 +2,15 @@
 
 import requests, json, urllib
 from models import QueryBuilder
+from esprit import versions
 
 class ESWireException(Exception):
     def __init__(self, value):
         self.value = value
     def __str__(self):
         return repr(self.value)
+
+DEFAULT_VERSION = "0.90.13"
 
 ##################################################################
 ## Connection to the index
@@ -213,41 +216,41 @@ def unpack_mget(requests_response):
 ####################################################################
 ## Mappings
 
-def put_mapping(connection, type=None, mapping=None, make_index=True, es_version="0.90.13"):
+def put_mapping(connection, type=None, mapping=None, make_index=True, es_version=DEFAULT_VERSION):
     if mapping is None:
         raise ESWireException("cannot put empty mapping")
     
     if not index_exists(connection):
         if make_index:
-            create_index(connection)
+            create_index(connection, es_version=es_version)
         else:
             raise ESWireException("index '" + str(connection.index) + "' does not exist")
 
-    if es_version.startswith("0.9"):
+    if versions.mapping_url_0x(es_version):
         url = elasticsearch_url(connection, type, "_mapping")
         r = _do_put(url, connection, json.dumps(mapping))
         return r
-    elif es_version.startswith("1."):
+    else:
         url = elasticsearch_url(connection, "_mapping", type)
         r = _do_put(url, connection, json.dumps(mapping))
         return r
 
-def has_mapping(connection, type, es_version="0.90.13"):
-    if es_version.startswith("0.9"):
+def has_mapping(connection, type, es_version=DEFAULT_VERSION):
+    if versions.mapping_url_0x(es_version):
         url = elasticsearch_url(connection, type, endpoint="_mapping")
         resp = _do_get(url, connection)
         return resp.status_code == 200
-    elif es_version.startswith("1."):
+    else:
         url = elasticsearch_url(connection, "_mapping", type)
         resp = _do_get(url, connection)
         return resp.status_code == 200
 
-def get_mapping(connection, type, es_version="0.90.13"):
-    if es_version.startswith("0.9"):
+def get_mapping(connection, type, es_version=DEFAULT_VERSION):
+    if versions.mapping_url_0x(es_version):
         url = elasticsearch_url(connection, type, endpoint="_mapping")
         resp = _do_get(url, connection)
         return resp
-    elif es_version.startswith("1."):
+    else:
         url = elasticsearch_url(connection, "_mapping", type)
         resp = _do_get(url, connection)
         return resp
@@ -255,9 +258,9 @@ def get_mapping(connection, type, es_version="0.90.13"):
 ##########################################################
 ## Existence checks
 
-def type_exists(connection, type, es_version="0.90.13"):
+def type_exists(connection, type, es_version=DEFAULT_VERSION):
     url = elasticsearch_url(connection, type)
-    if es_version.startswith("0"):
+    if versions.type_get(es_version):
         resp = _do_get(url, connection)
     else:
         resp = _do_head(url, connection)
@@ -271,12 +274,20 @@ def index_exists(connection):
 ###########################################################
 ## Index create
 
-def create_index(connection, mapping=None):
+def create_index(connection, mapping=None, es_version=DEFAULT_VERSION):
     iurl = elasticsearch_url(connection)
+
+    method = _do_put
+    if versions.create_with_mapping_post(es_version):
+        method = _do_post
+
     if mapping is None:
-        resp = _do_post(iurl, connection)
+        resp = method(iurl, connection)
     else:
-        resp = _do_post(iurl, connection, data=json.dumps(mapping))
+        resp = method(iurl, connection, data=json.dumps(mapping))
+
+    if resp.status_code < 200 or resp.status_code >= 400:
+        raise ESWireException(resp)
     return resp
 
 ############################################################
@@ -312,7 +323,7 @@ def delete(connection, type=None, id=None):
     resp = _do_delete(url, connection)
     return resp
 
-def delete_by_query(connection, type, query, es_version="0.90.13"):
+def delete_by_query(connection, type, query, es_version=DEFAULT_VERSION):
     url = elasticsearch_url(connection, type, endpoint="_query")
     if "query" in query and es_version.startswith("0.9"):
         # we have to unpack the query, as the endpoint covers that
