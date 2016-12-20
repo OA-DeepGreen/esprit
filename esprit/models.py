@@ -1,5 +1,6 @@
 from copy import deepcopy
 import string
+from esprit import versions
 
 unicode_punctuation_map = dict((ord(char), None) for char in string.punctuation)
 
@@ -41,10 +42,16 @@ class Query(object):
         if "match_all" in self.q["query"]:
             del self.q["query"]["match_all"]
 
-    def include_source(self, values):
+    def include_source(self, values, es_version="0.90.13"):
         if "_source" not in self.q:
             self.q["_source"] = {}
-        self.q["_source"]["include"] = values
+        if versions.source_include(es_version):
+            self.q["_source"]["include"] = values
+        else:
+            self.q["_source"]["includes"] = values
+
+    def set_source(self, values):
+        self.q["_source"] = values
 
     def as_dict(self):
         return self.q

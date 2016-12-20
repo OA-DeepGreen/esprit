@@ -12,3 +12,8 @@ def type_get(v):
 
 def create_with_mapping_post(v):
     return not v.startswith("5")
+
+def source_include(v):
+    if v.startswith("5"):
+        return False
+    return True
