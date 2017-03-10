@@ -96,6 +96,25 @@ def dump(conn, type, q=None, page_size=1000, limit=None, method="POST", out=None
             record = transform(record)
         out.write(json.dumps(record))
 
+
+def reindex(old_conn, new_conn, alias, types, new_mapping=None):
+    """
+    Re-index without downtime by aliasing and duplicating the existing index
+    :param old_conn:
+    :param new_conn:
+    :param alias:
+    :param types:
+    :param new_mapping:
+    :return:
+    """
+    pass
+    # Ensure the current index is available via alias
+    # Create a new index with the new mapping
+    # Copy the data from one index to the other
+    # Switch alias to point to second index
+
+
+
 class JSONListWriter(object):
     def __init__(self, path):
         self.f = open(path, "wb")
