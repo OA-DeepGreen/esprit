@@ -97,6 +97,17 @@ def dump(conn, type, q=None, page_size=1000, limit=None, method="POST", out=None
         out.write(json.dumps(record))
 
 
+def create_alias(conn, alias):
+    actions = raw.to_alias_actions(add=[{"alias": alias, "index": conn.index}])
+    print raw.post_alias(conn, actions).json()
+
+
+def repoint_alias(old_conn, new_conn, alias):
+    actions = raw.to_alias_actions(add=[{"alias": alias, "index": new_conn.index}],
+                                   remove=[{"alias": alias, "index": old_conn.index}])
+    print raw.post_alias(new_conn, actions).json()
+
+
 def reindex(old_conn, new_conn, alias, types, new_mapping=None):
     """
     Re-index without downtime by aliasing and duplicating the existing index

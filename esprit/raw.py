@@ -271,6 +271,11 @@ def index_exists(connection):
     resp = _do_get(iurl, connection)
     return resp.status_code == 200
 
+def alias_exists(connection, alias):
+    aurl = elasticsearch_url(connection, endpoint="_aliases")
+    resp = _do_get(aurl, connection)
+    return alias in resp.json()[connection.index]['aliases'].keys()
+
 ###########################################################
 ## Index create
 
@@ -334,7 +339,7 @@ def delete_by_query(connection, type, query, es_version=DEFAULT_VERSION):
 def to_bulk_del(ids):
     data = ''
     for i in ids:
-        data += json.dumps( {'delete':{'_id':i}} ) + '\n'
+        data += json.dumps( {'delete': {'_id': i}} ) + '\n'
     return data
 
 def bulk_delete(connection, type, ids):
@@ -349,4 +354,26 @@ def bulk_delete(connection, type, ids):
 def refresh(connection):
     url = elasticsearch_url(connection, endpoint="_refresh")
     resp = _do_post(url, connection)
+    return resp
+
+##############################################################
+## Aliases
+
+def to_alias_actions(add=None, remove=None):
+    """
+    Create a list of actions to post to the alias endpoint
+    :param add: a list of dicts: [{"alias": <alias name>, "index": <index name>}] to add to the alias list
+    :param remove: a list of dicts: [{"alias": <alias name>, "index": <index name>}] to remove from the alias list
+    :return: The actions packaged together, as {"actions": [...]}
+    """
+    acts = {"actions": []}
+    if add is not None:
+        [acts["actions"].append({"add": a}) for a in add]
+    if remove is not None:
+        [acts["actions"].append({"remove": r}) for r in remove]
+    return acts
+
+def post_alias(connection, alias_actions):
+    url = elasticsearch_url(connection, endpoint="_aliases", omit_index=True)
+    resp = _do_post(url, connection, json.dumps(alias_actions))
     return resp
