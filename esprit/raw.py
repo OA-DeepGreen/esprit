@@ -274,7 +274,10 @@ def index_exists(connection):
 def alias_exists(connection, alias):
     aurl = elasticsearch_url(connection, endpoint="_aliases")
     resp = _do_get(aurl, connection)
-    return alias in resp.json()[connection.index]['aliases'].keys()
+    if index_exists(connection):
+        return alias in resp.json()[connection.index]['aliases'].keys()
+    else:
+        return False
 
 ###########################################################
 ## Index create
