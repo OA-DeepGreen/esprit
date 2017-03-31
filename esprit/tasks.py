@@ -1,5 +1,5 @@
 from esprit import raw, models
-import json, sys
+import json, sys, time
 
 class ScrollException(Exception):
     pass
@@ -95,6 +95,57 @@ def dump(conn, type, q=None, page_size=1000, limit=None, method="POST", out=None
         if transform is not None:
             record = transform(record)
         out.write(json.dumps(record))
+
+
+def create_alias(conn, alias):
+    actions = raw.to_alias_actions(add=[{"alias": alias, "index": conn.index}])
+    print raw.post_alias(conn, actions).json()
+
+
+def repoint_alias(old_conn, new_conn, alias):
+    actions = raw.to_alias_actions(add=[{"alias": alias, "index": new_conn.index}],
+                                   remove=[{"alias": alias, "index": old_conn.index}])
+    print raw.post_alias(new_conn, actions).json()
+
+
+def reindex(old_conn, new_conn, alias, types, new_mappings=None, new_version="0.90.13"):
+    """
+    Re-index without search downtime by aliasing and duplicating the specified types from the existing index
+    :param old_conn: Connection to the existing index
+    :param new_conn: Connection to the new index (will create if it doesn't exist)
+    :param alias: Existing alias which is used to access the index. Will be changed to point to the new index.
+    :param types: List of types to copy across to the new index
+    :param new_mappings: New mappings to use, as a dictionary of {<type>: mapping}
+    :param new_version: The version of the new index (fixme: used for the mapping function)
+    """
+
+    # Ensure the old index is available via alias, and the new one is not
+    if raw.alias_exists(new_conn, alias):
+        raise Exception("Alias incorrectly set - check you have the connections the right way around.")
+    elif not raw.alias_exists(old_conn, alias):
+        print "The specified alias {0} does not exist for index {1}. Creating it.".format(alias, old_conn.index)
+        create_alias(old_conn, alias)
+    else:
+        print "Alias OK"
+
+    # Create a new index with the new mapping
+    for t in types:
+        r = raw.put_mapping(new_conn, type=t, mapping=new_mappings[t], make_index=True, es_version=new_version)
+        print "Creating ES Type+Mapping for", t, "; status:", r.status_code
+    print "Mapping OK"
+    time.sleep(1)
+
+    # Copy the data from old index to new index
+    for t in types:
+        copy(old_conn, t, new_conn, t)
+    print "Copy OK"
+
+    time.sleep(1)
+
+    # Switch alias to point to second index
+    repoint_alias(old_conn, new_conn, alias)
+    print "Reindex complete."
+
 
 class JSONListWriter(object):
     def __init__(self, path):
