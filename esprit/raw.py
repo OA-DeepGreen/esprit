@@ -370,10 +370,10 @@ def to_alias_actions(add=None, remove=None):
     :return: The actions packaged together, as {"actions": [...]}
     """
     acts = {"actions": []}
-    if add is not None:
-        [acts["actions"].append({"add": a}) for a in add]
-    if remove is not None:
-        [acts["actions"].append({"remove": r}) for r in remove]
+    add = add if add else []
+    remove = remove if remove else []
+    [acts["actions"].append({"add": a}) for a in add]
+    [acts["actions"].append({"remove": r}) for r in remove]
     return acts
 
 def post_alias(connection, alias_actions):

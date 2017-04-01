@@ -99,13 +99,13 @@ def dump(conn, type, q=None, page_size=1000, limit=None, method="POST", out=None
 
 def create_alias(conn, alias):
     actions = raw.to_alias_actions(add=[{"alias": alias, "index": conn.index}])
-    print raw.post_alias(conn, actions).json()
+    print "Alias create reply: ", raw.post_alias(conn, actions).json()
 
 
 def repoint_alias(old_conn, new_conn, alias):
     actions = raw.to_alias_actions(add=[{"alias": alias, "index": new_conn.index}],
                                    remove=[{"alias": alias, "index": old_conn.index}])
-    print raw.post_alias(new_conn, actions).json()
+    print "Alias re-point reply: ", raw.post_alias(new_conn, actions).json()
 
 
 def reindex(old_conn, new_conn, alias, types, new_mappings=None, new_version="0.90.13"):
