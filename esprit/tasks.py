@@ -137,6 +137,7 @@ def reindex(old_conn, new_conn, alias, types, new_mappings=None, new_version="0.
 
     # Copy the data from old index to new index
     for t in types:
+        print "Copying type {0}".format(t)
         copy(old_conn, t, new_conn, t)
     print "Copy OK"
 
