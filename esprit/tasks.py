@@ -148,6 +148,34 @@ def reindex(old_conn, new_conn, alias, types, new_mappings=None, new_version="0.
     print "Reindex complete."
 
 
+def compare_index_counts(conns, types, q=None):
+    """ Compare two or more indexes by doc counts of given types. Returns True if all counts equal, False otherwise """
+    if q is not None:
+        q = q.copy()
+        if "size" not in q or q['size'] != 0:
+            q["size"] = 0
+    if q is None:
+        q = {"query": {"match_all": {}}, "size": 0}
+
+    equal_counts = []
+
+    for t in types:
+        print "\ntype:", t
+        counts = []
+        for c in conns:
+            resp = raw.search(connection=c, type=t, query=q)
+            try:
+                count = resp.json()["hits"]["total"]
+                counts.append(count)
+                print "index {0}: {1}".format(c.index, count)
+            except KeyError:
+                print resp.json()
+
+        equal_counts.append(reduce(lambda x, y: x == y, counts))
+
+    return reduce(lambda x, y: x and y, equal_counts)
+
+
 class JSONListWriter(object):
     def __init__(self, path):
         self.f = open(path, "wb")
