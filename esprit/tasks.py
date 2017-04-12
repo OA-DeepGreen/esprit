@@ -1,8 +1,10 @@
 from esprit import raw, models
 import json, sys, time
 
+
 class ScrollException(Exception):
     pass
+
 
 def copy(source_conn, source_type, target_conn, target_type, limit=None, batch_size=1000, method="POST", q=None):
     if q is None:
@@ -18,15 +20,16 @@ def copy(source_conn, source_type, target_conn, target_type, limit=None, batch_s
         print "writing batch of", len(batch)
         raw.bulk(target_conn, target_type, batch)
 
+
 def scroll(conn, type, q=None, page_size=1000, limit=None, keepalive="1m", keyword_subfield="exact"):
     if q is not None:
         q = q.copy()
     if q is None:
-        q = {"query" : {"match_all" : {}}}
+        q = {"query": {"match_all": {}}}
     if "size" not in q:
         q["size"] = page_size
-    if "sort" not in q: # to ensure complete coverage on a changing index, sort by id is our best bet
-        q["sort"] = [{"id." + keyword_subfield : {"order" : "asc"}}]
+    if "sort" not in q:                    # to ensure complete coverage on a changing index, sort by id is our best bet
+        q["sort"] = [{"id." + keyword_subfield: {"order": "asc"}}]      # fixme: what about no .exact or other subfield?
 
     resp = raw.initialise_scroll(conn, type, q, keepalive)
     if resp.status_code != 200:
@@ -51,7 +54,7 @@ def scroll(conn, type, q=None, page_size=1000, limit=None, keepalive="1m", keywo
 
         sresp = raw.scroll_next(conn, scroll_id, keepalive=keepalive)
         if raw.scroll_timedout(sresp):
-            raise ScrollException("scroll timed out - you probably need to raise the keepalive value")
+            raise ScrollException("Scroll timed out - you probably need to raise the keepalive value")
         results = raw.unpack_result(sresp)
 
         if len(results) == 0:
@@ -63,12 +66,13 @@ def scroll(conn, type, q=None, page_size=1000, limit=None, keepalive="1m", keywo
             counter += 1
             yield r
 
+
 def iterate(conn, type, q, page_size=1000, limit=None, method="POST", keyword_subfield="exact"):
     q = q.copy()
     q["size"] = page_size
     q["from"] = 0
-    if "sort" not in q: # to ensure complete coverage on a changing index, sort by id is our best bet
-        q["sort"] = [{"id." + keyword_subfield : {"order" : "asc"}}]
+    if "sort" not in q:                    # to ensure complete coverage on a changing index, sort by id is our best bet
+        q["sort"] = [{"id." + keyword_subfield: {"order": "asc"}}]      # fixme: what about no .exact or other subfield?
     counter = 0
     while True:
         # apply the limit
@@ -88,8 +92,9 @@ def iterate(conn, type, q, page_size=1000, limit=None, method="POST", keyword_su
             yield r
         q["from"] += page_size
 
+
 def dump(conn, type, q=None, page_size=1000, limit=None, method="POST", out=None, transform=None):
-    q = q if q is not None else {"query" : {"match_all" : {}}}
+    q = q if q is not None else {"query": {"match_all": {}}}
     out = out if out is not None else sys.stdout
     for record in iterate(conn, type, q, page_size=page_size, limit=limit, method=method):
         if transform is not None:

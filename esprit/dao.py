@@ -3,11 +3,14 @@ from esprit import raw, util, tasks, versions
 from copy import deepcopy
 import time
 
+
 class StoreException(Exception):
     def __init__(self, value):
         self.value = value
+
     def __str__(self):
         return repr(self.value)
+
 
 class DAO(object):
     __es_version__ = "1.7.5"
@@ -95,10 +98,10 @@ class DAO(object):
 
     def _es_field_block(self, conn, type, now, max_wait=False):
         q = {
-            "query" : {
-                "term" : {"id.exact" : self.id}
+            "query": {
+                "term": {"id.exact": self.id}
             },
-            "fields" : ["last_updated"]
+            "fields": ["last_updated"]
         }
         waited = 0.0
         while True:
@@ -121,10 +124,10 @@ class DAO(object):
 
     def _es_source_block(self, conn, type, now, max_wait=False):
         q = {
-            "query" : {
-                "term" : {"id" : self.id}
+            "query": {
+                "term": {"id": self.id}
             },
-            "_source" : ["last_updated"]
+            "_source": ["last_updated"]
         }
         waited = 0.0
         while True:
@@ -150,7 +153,6 @@ class DAO(object):
             conn = self._get_connection()
 
         # the record may be in any one of the read types, so we need to check them all
-        types = []
         if type is not None:
             if isinstance(type, list):
                 types = type
@@ -179,7 +181,7 @@ class DAO(object):
                 self._action_remove(conn, action)
             elif action.keys()[0] == "store":
                 self._action_store(conn, action)
-    
+
     def _action_remove(self, conn, remove_action):
         obj = remove_action.get("remove")
         if "index" not in obj:
@@ -210,7 +212,8 @@ class DAO(object):
 
     def _get_read_types(self):
         raise NotImplementedError()
-    
+
+
 class DomainObject(DAO):
     __type__ = None
     __conn__ = None
@@ -272,7 +275,7 @@ class DomainObject(DAO):
     
     @classmethod
     def pull(cls, id_, conn=None, wrap=True, types=None):
-        '''Retrieve object by id.'''
+        """Retrieve object by id."""
         if conn is None:
             conn = cls.__conn__
 
@@ -298,14 +301,14 @@ class DomainObject(DAO):
     
     @classmethod
     def query(cls, q='', terms=None, should_terms=None, facets=None, conn=None, types=None, **kwargs):
-        '''Perform a query on backend.
+        """ Perform a query on backend.
 
         :param q: maps to query_string parameter if string, or query dict if dict.
         :param terms: dictionary of terms to filter on. values should be lists. 
         :param facets: dict of facets to return from the query.
         :param kwargs: any keyword args as per
             http://www.elasticsearch.org/guide/reference/api/search/uri-request.html
-        '''
+        """
         if conn is None:
             conn = cls.__conn__
 
@@ -314,8 +317,8 @@ class DomainObject(DAO):
         if isinstance(q,dict):
             query = q
             if 'bool' not in query['query']:
-                boolean = {'bool':{'must': [] }}
-                boolean['bool']['must'].append( query['query'] )
+                boolean = {'bool': {'must': []}}
+                boolean['bool']['must'].append(query['query'])
                 query['query'] = boolean
             if 'must' not in query['query']['bool']:
                 query['query']['bool']['must'] = []
@@ -324,7 +327,7 @@ class DomainObject(DAO):
                 'query': {
                     'bool': {
                         'must': [
-                            {'query_string': { 'query': q }}
+                            {'query_string': {'query': q}}
                         ]
                     }
                 }
@@ -344,20 +347,21 @@ class DomainObject(DAO):
             if 'facets' not in query:
                 query['facets'] = {}
             for k, v in facets.items():
-                query['facets'][k] = {"terms":v}
+                query['facets'][k] = {"terms": v}
 
         if terms:
-            boolean = {'must': [] }
+            boolean = {'must': []}
             for term in terms:
-                if not isinstance(terms[term],list): terms[term] = [terms[term]]
+                if not isinstance(terms[term], list):
+                    terms[term] = [terms[term]]
                 for val in terms[term]:
                     obj = {'term': {}}
-                    obj['term'][ term ] = val
+                    obj['term'][term] = val
                     boolean['must'].append(obj)
             if q and not isinstance(q,dict):
-                boolean['must'].append( {'query_string': { 'query': q } } )
+                boolean['must'].append({'query_string': {'query': q}})
             elif q and 'query' in q:
-                boolean['must'].append( query['query'] )
+                boolean['must'].append(query['query'])
             query['query'] = {'bool': boolean}
 
         for k,v in kwargs.items():
@@ -368,8 +372,9 @@ class DomainObject(DAO):
 
         if should_terms is not None and len(should_terms) > 0:
             for s in should_terms:
-                if not isinstance(should_terms[s],list): should_terms[s] = [should_terms[s]]
-                query["query"]["bool"]["must"].append({"terms" : {s : should_terms[s]}})
+                if not isinstance(should_terms[s], list):
+                    should_terms[s] = [should_terms[s]]
+                query["query"]["bool"]["must"].append({"terms": {s: should_terms[s]}})
 
         r = raw.search(conn, types, query)
         return r.json()
@@ -379,7 +384,6 @@ class DomainObject(DAO):
         j = cls.query(q=q, terms=terms, should_terms=should_terms, facets=facets, conn=conn, types=types, **kwargs)
         res = raw.unpack_json_result(j)
         return [cls(r) if wrap else r for r in res]
-
 
     @classmethod
     def delete_by_query(cls, query, conn=None, es_version="0.90.13", type=None):
@@ -394,8 +398,8 @@ class DomainObject(DAO):
         q = q.copy()
         q["size"] = page_size
         q["from"] = 0
-        if "sort" not in q: # to ensure complete coverage on a changing index, sort by id is our best bet
-            q["sort"] = [{"id." + keyword_subfield : {"order" : "asc"}}]
+        if "sort" not in q:                # to ensure complete coverage on a changing index, sort by id is our best bet
+            q["sort"] = [{"id." + keyword_subfield: {"order": "asc"}}]  # fixme: what about no .exact or other subfield?
         counter = 0
         while True:
             # apply the limit
@@ -436,7 +440,7 @@ class DomainObject(DAO):
         types = cls.get_read_types(types)
 
         if q is None:
-            q = {"query" : {"match_all" : {}}}
+            q = {"query": {"match_all": {}}}
 
         gen = tasks.scroll(conn, types, q, page_size=page_size, limit=limit, keepalive=keepalive)
 
@@ -453,11 +457,11 @@ class DomainObject(DAO):
                 return
     
 ########################################################################
-## Some useful ES queries
+# Some useful ES queries
 ########################################################################
 
 all_query = {
-    "query" : {
-        "match_all" : { }
+    "query": {
+        "match_all": {}
     }
 }
