@@ -92,9 +92,9 @@ class DAO(object):
 
         if blocking:
             if versions.fields_query(self._es_version):
-                self._es_field_block(conn, type, now)
+                self._es_field_block(conn, type, now, max_wait)
             else:
-                self._es_source_block(conn, type, now)
+                self._es_source_block(conn, type, now, max_wait)
 
     def _es_field_block(self, conn, type, now, max_wait=False):
         q = {
@@ -314,7 +314,7 @@ class DomainObject(DAO):
 
         types = cls.get_read_types(types)
         
-        if isinstance(q,dict):
+        if isinstance(q, dict):
             query = q
             if 'bool' not in query['query']:
                 boolean = {'bool': {'must': []}}
@@ -358,13 +358,13 @@ class DomainObject(DAO):
                     obj = {'term': {}}
                     obj['term'][term] = val
                     boolean['must'].append(obj)
-            if q and not isinstance(q,dict):
+            if q and not isinstance(q, dict):
                 boolean['must'].append({'query_string': {'query': q}})
             elif q and 'query' in q:
                 boolean['must'].append(query['query'])
             query['query'] = {'bool': boolean}
 
-        for k,v in kwargs.items():
+        for k, v in kwargs.items():
             if k == '_from':
                 query['from'] = v
             else:
