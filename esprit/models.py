@@ -114,14 +114,14 @@ class QueryBuilder(object):
         # FIXME: note that we don't do anything about stopwords right now.
         out = text_string
         if type(text_string) == "str":
-            out = text_string.translate(string.maketrans("",""), string.punctuation)
+            out = text_string.translate(string.maketrans("", ""), string.punctuation)
         elif type(text_string) == "unicode":
             out = text_string.translate(unicode_punctuation_map)
         return list(set([o.lower() for o in out.split(" ") if o != ""]))
     
     @classmethod
     def escape(cls, query_string):
-        qs = query_string.replace(cls._escape_char, cls._escape_char + cls._escape_char) # escape the escape char
+        qs = query_string.replace(cls._escape_char, cls._escape_char + cls._escape_char)        # escape the escape char
         for sc in cls._special_chars:
             qs = qs.replace(sc, cls._escape_char + sc)
         return qs

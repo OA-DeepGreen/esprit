@@ -49,7 +49,7 @@ EXACT = make_dynamic_templates_entry("exact", "*", "string",
 
 def make_mapping(type, dynamic_templates=None, properties=None):
     # create the type entry
-    m = {type : {}}
+    m = {type: {}}
 
     # if there are dynamic templates, add them
     if dynamic_templates is not None:
