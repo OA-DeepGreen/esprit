@@ -1,5 +1,5 @@
-from esprit import tasks
-from esprit import raw
+from esprit import tasks, raw
+
 
 def copy(source, source_type, target, target_type, limit=None, batch=1000):
     source_index = source.split("/")[-1]
