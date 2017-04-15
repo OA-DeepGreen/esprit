@@ -6,11 +6,11 @@ class ScrollException(Exception):
     pass
 
 
-def copy(source_conn, source_type, target_conn, target_type, limit=None, batch_size=1000, method="POST", q=None):
+def copy(source_conn, source_type, target_conn, target_type, limit=None, batch_size=1000, method="POST", q=None, keyword_subfield="exact"):
     if q is None:
         q = models.QueryBuilder.match_all()
     batch = []
-    for r in iterate(source_conn, source_type, q, page_size=batch_size, limit=limit, method=method):
+    for r in iterate(source_conn, source_type, q, page_size=batch_size, limit=limit, method=method, keyword_subfield=keyword_subfield):
         batch.append(r)
         if len(batch) >= batch_size:
             print "writing batch of", len(batch)
@@ -28,8 +28,10 @@ def scroll(conn, type, q=None, page_size=1000, limit=None, keepalive="1m", keywo
         q = {"query": {"match_all": {}}}
     if "size" not in q:
         q["size"] = page_size
-    if "sort" not in q:                    # to ensure complete coverage on a changing index, sort by id is our best bet
-        q["sort"] = [{"id." + keyword_subfield: {"order": "asc"}}]      # fixme: what about no .exact or other subfield?
+
+    # To ensure complete coverage on a changing index, sort by id is our best bet. If there's .exact, even better.
+    if "sort" not in q:
+        q["sort"] = [{"id" + ('.' + keyword_subfield if keyword_subfield else ''): {"order": "asc"}}]
 
     resp = raw.initialise_scroll(conn, type, q, keepalive)
     if resp.status_code != 200:
@@ -71,8 +73,9 @@ def iterate(conn, type, q, page_size=1000, limit=None, method="POST", keyword_su
     q = q.copy()
     q["size"] = page_size
     q["from"] = 0
-    if "sort" not in q:                    # to ensure complete coverage on a changing index, sort by id is our best bet
-        q["sort"] = [{"id." + keyword_subfield: {"order": "asc"}}]      # fixme: what about no .exact or other subfield?
+    # To ensure complete coverage on a changing index, sort by id is our best bet. If there's .exact, even better.
+    if "sort" not in q:
+        q["sort"] = [{"id" + ('.' + keyword_subfield if keyword_subfield else ''): {"order": "asc"}}]
     counter = 0
     while True:
         # apply the limit
@@ -140,10 +143,11 @@ def reindex(old_conn, new_conn, alias, types, new_mappings=None, new_version="0.
     print "Mapping OK"
     time.sleep(1)
 
-    # Copy the data from old index to new index
+    # Copy the data from old index to new index. The index should be unchanging (and may not have .exact) so don't use
+    # keyword_subfield.
     for t in types:
         print "Copying type {0}".format(t)
-        copy(old_conn, t, new_conn, t)
+        copy(old_conn, t, new_conn, t, keyword_subfield='')
     print "Copy OK"
 
     time.sleep(1)

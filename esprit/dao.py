@@ -398,8 +398,9 @@ class DomainObject(DAO):
         q = q.copy()
         q["size"] = page_size
         q["from"] = 0
-        if "sort" not in q:                # to ensure complete coverage on a changing index, sort by id is our best bet
-            q["sort"] = [{"id." + keyword_subfield: {"order": "asc"}}]  # fixme: what about no .exact or other subfield?
+        # To ensure complete coverage on a changing index, sort by id is our best bet. If there's .exact, even better.
+        if "sort" not in q:
+            q["sort"] = [{"id" + ('.' + keyword_subfield if keyword_subfield else ''): {"order": "asc"}}]
         counter = 0
         while True:
             # apply the limit
