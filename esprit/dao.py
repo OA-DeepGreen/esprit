@@ -394,13 +394,12 @@ class DomainObject(DAO):
         raw.delete_by_query(conn, type, query, es_version=es_version)
 
     @classmethod
-    def iterate(cls, q, page_size=1000, limit=None, wrap=True, keyword_subfield="exact", **kwargs):
+    def iterate(cls, q, page_size=1000, limit=None, wrap=True, **kwargs):
         q = q.copy()
         q["size"] = page_size
         q["from"] = 0
-        # To ensure complete coverage on a changing index, sort by id is our best bet. If there's .exact, even better.
         if "sort" not in q:
-            q["sort"] = [{"id" + ('.' + keyword_subfield if keyword_subfield else ''): {"order": "asc"}}]
+            q["sort"] = [{"_uid": {"order": "asc"}}]
         counter = 0
         while True:
             # apply the limit

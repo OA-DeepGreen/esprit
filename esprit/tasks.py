@@ -6,11 +6,11 @@ class ScrollException(Exception):
     pass
 
 
-def copy(source_conn, source_type, target_conn, target_type, limit=None, batch_size=1000, method="POST", q=None, keyword_subfield="exact"):
+def copy(source_conn, source_type, target_conn, target_type, limit=None, batch_size=1000, method="POST", q=None):
     if q is None:
         q = models.QueryBuilder.match_all()
     batch = []
-    for r in iterate(source_conn, source_type, q, page_size=batch_size, limit=limit, method=method, keyword_subfield=keyword_subfield):
+    for r in iterate(source_conn, source_type, q, page_size=batch_size, limit=limit, method=method):
         batch.append(r)
         if len(batch) >= batch_size:
             print "writing batch of", len(batch)
@@ -21,17 +21,15 @@ def copy(source_conn, source_type, target_conn, target_type, limit=None, batch_s
         raw.bulk(target_conn, target_type, batch)
 
 
-def scroll(conn, type, q=None, page_size=1000, limit=None, keepalive="1m", keyword_subfield="exact"):
+def scroll(conn, type, q=None, page_size=1000, limit=None, keepalive="1m"):
     if q is not None:
         q = q.copy()
     if q is None:
         q = {"query": {"match_all": {}}}
     if "size" not in q:
         q["size"] = page_size
-
-    # To ensure complete coverage on a changing index, sort by id is our best bet. If there's .exact, even better.
     if "sort" not in q:
-        q["sort"] = [{"id" + ('.' + keyword_subfield if keyword_subfield else ''): {"order": "asc"}}]
+        q["sort"] = [{"_uid": {"order": "asc"}}]
 
     resp = raw.initialise_scroll(conn, type, q, keepalive)
     if resp.status_code != 200:
@@ -69,13 +67,12 @@ def scroll(conn, type, q=None, page_size=1000, limit=None, keepalive="1m", keywo
             yield r
 
 
-def iterate(conn, type, q, page_size=1000, limit=None, method="POST", keyword_subfield="exact"):
+def iterate(conn, type, q, page_size=1000, limit=None, method="POST"):
     q = q.copy()
     q["size"] = page_size
     q["from"] = 0
-    # To ensure complete coverage on a changing index, sort by id is our best bet. If there's .exact, even better.
     if "sort" not in q:
-        q["sort"] = [{"id" + ('.' + keyword_subfield if keyword_subfield else ''): {"order": "asc"}}]
+        q["sort"] = [{"_uid": {"order": "asc"}}]
     counter = 0
     while True:
         # apply the limit
@@ -147,7 +144,7 @@ def reindex(old_conn, new_conn, alias, types, new_mappings=None, new_version="0.
     # keyword_subfield.
     for t in types:
         print "Copying type {0}".format(t)
-        copy(old_conn, t, new_conn, t, keyword_subfield='')
+        copy(old_conn, t, new_conn, t)
     print "Copy OK"
 
     time.sleep(1)
