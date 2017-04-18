@@ -21,15 +21,15 @@ def copy(source_conn, source_type, target_conn, target_type, limit=None, batch_s
         raw.bulk(target_conn, target_type, batch)
 
 
-def scroll(conn, type, q=None, page_size=1000, limit=None, keepalive="1m", keyword_subfield="exact"):
+def scroll(conn, type, q=None, page_size=1000, limit=None, keepalive="1m"):
     if q is not None:
         q = q.copy()
     if q is None:
         q = {"query": {"match_all": {}}}
     if "size" not in q:
         q["size"] = page_size
-    if "sort" not in q:                    # to ensure complete coverage on a changing index, sort by id is our best bet
-        q["sort"] = [{"id." + keyword_subfield: {"order": "asc"}}]      # fixme: what about no .exact or other subfield?
+    if "sort" not in q:
+        q["sort"] = [{"_uid": {"order": "asc"}}]
 
     resp = raw.initialise_scroll(conn, type, q, keepalive)
     if resp.status_code != 200:
@@ -67,12 +67,12 @@ def scroll(conn, type, q=None, page_size=1000, limit=None, keepalive="1m", keywo
             yield r
 
 
-def iterate(conn, type, q, page_size=1000, limit=None, method="POST", keyword_subfield="exact"):
+def iterate(conn, type, q, page_size=1000, limit=None, method="POST"):
     q = q.copy()
     q["size"] = page_size
     q["from"] = 0
-    if "sort" not in q:                    # to ensure complete coverage on a changing index, sort by id is our best bet
-        q["sort"] = [{"id." + keyword_subfield: {"order": "asc"}}]      # fixme: what about no .exact or other subfield?
+    if "sort" not in q:
+        q["sort"] = [{"_uid": {"order": "asc"}}]
     counter = 0
     while True:
         # apply the limit
@@ -140,7 +140,8 @@ def reindex(old_conn, new_conn, alias, types, new_mappings=None, new_version="0.
     print "Mapping OK"
     time.sleep(1)
 
-    # Copy the data from old index to new index
+    # Copy the data from old index to new index. The index should be unchanging (and may not have .exact) so don't use
+    # keyword_subfield.
     for t in types:
         print "Copying type {0}".format(t)
         copy(old_conn, t, new_conn, t)
