@@ -99,7 +99,7 @@ def dump(conn, type, q=None, page_size=1000, limit=None, method="POST", out=None
     for record in iterate(conn, type, q, page_size=page_size, limit=limit, method=method):
         if transform is not None:
             record = transform(record)
-        out.write(json.dumps(record))
+        out.write(json.dumps(record) + "\n")
 
 
 def create_alias(conn, alias):
