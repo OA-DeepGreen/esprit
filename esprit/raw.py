@@ -193,7 +193,8 @@ def scroll_next(connection, scroll_id, keepalive="1m"):
 
 
 def scroll_timedout(requests_response):
-    return requests_response.status_code == 500
+    # We are likely to receive a 404 (no search context found), perhaps 502 from a proxy. Count any error code.
+    return requests_response.status_code >= 400
 
 
 def unpack_scroll(requests_response):
