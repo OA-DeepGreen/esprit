@@ -422,3 +422,14 @@ def post_alias(connection, alias_actions):
     url = elasticsearch_url(connection, endpoint="_aliases", omit_index=True)
     resp = _do_post(url, connection, json.dumps(alias_actions))
     return resp
+
+##############################################################
+# List types
+
+def list_types(connection, index_name_override=''):
+    url = elasticsearch_url(connection, "_mapping")
+    resp = _do_get(url, connection)
+    index = connection.index
+    if index_name_override:  # for an aliased index, connection.index may be different than what the mappings return
+        index = index_name_override
+    return resp.json()[index]['mappings'].keys()
