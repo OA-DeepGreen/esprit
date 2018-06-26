@@ -437,10 +437,9 @@ def post_alias(connection, alias_actions):
 ##############################################################
 # List types
 
-def list_types(connection, index_name_override=''):
+
+def list_types(connection):
     url = elasticsearch_url(connection, "_mapping")
-    resp = _do_get(url, connection)
-    index = connection.index
-    if index_name_override:  # for an aliased index, connection.index may be different than what the mappings return
-        index = index_name_override
-    return resp.json()[index]['mappings'].keys()
+    resp = _do_get(url, connection).json()
+    index = resp.keys()[0]
+    return resp[index]['mappings'].keys()
