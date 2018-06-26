@@ -93,13 +93,16 @@ def iterate(conn, type, q, page_size=1000, limit=None, method="POST"):
         q["from"] += page_size
 
 
-def dump(conn, type, q=None, page_size=1000, limit=None, method="POST", out=None, transform=None):
+def dump(conn, type, q=None, page_size=1000, limit=None, method="POST", out=None, transform=None, es_bulk_format=True, idkey='id'):
     q = q if q is not None else {"query": {"match_all": {}}}
     out = out if out is not None else sys.stdout
     for record in iterate(conn, type, q, page_size=page_size, limit=limit, method=method):
         if transform is not None:
             record = transform(record)
-        out.write(json.dumps(record) + "\n")
+        if es_bulk_format:
+            out.write(raw.to_bulk_single_rec(record, idkey=idkey, index=conn.index, type_=type))
+        else:
+            out.write(json.dumps(record) + "\n")
 
 
 def create_alias(conn, alias):
