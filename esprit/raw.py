@@ -344,17 +344,28 @@ def store(connection, type, record, id=None, params=None):
     return resp
 
 
-def to_bulk(records, idkey="id"):
+def to_bulk(records, idkey="id", index='', type_=''):
     data = ''
     for r in records:
-        data += json.dumps({'index': {'_id': r[idkey]}}) + '\n'
-        data += json.dumps(r) + '\n'
+        to_bulk_single_rec(r, idkey=idkey, index=index, type_=type_)
     return data
 
 
-def bulk(connection, type, records, idkey='id'):
+def to_bulk_single_rec(record, idkey="id", index='', type_=''):
+    data = ''
+    datadict = {'index': {'_id': record[idkey]}}
+    if index:
+        datadict['index']['_index'] = index
+    if type_:
+        datadict['index']['_type'] = type_
+    data += json.dumps(datadict) + '\n'
+    data += json.dumps(record) + '\n'
+    return data
+
+
+def bulk(connection, records, idkey='id', type_=''):
     data = to_bulk(records, idkey=idkey)
-    url = elasticsearch_url(connection, type, endpoint="_bulk")
+    url = elasticsearch_url(connection, type_, endpoint="_bulk")
     resp = _do_post(url, connection, data=data)
     return resp
 

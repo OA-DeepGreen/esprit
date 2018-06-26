@@ -14,11 +14,11 @@ def copy(source_conn, source_type, target_conn, target_type, limit=None, batch_s
         batch.append(r)
         if len(batch) >= batch_size:
             print "writing batch of", len(batch)
-            raw.bulk(target_conn, target_type, batch)
+            raw.bulk(target_conn, batch, type_=target_type)
             batch = []
     if len(batch) > 0:
         print "writing batch of", len(batch)
-        raw.bulk(target_conn, target_type, batch)
+        raw.bulk(target_conn, batch, type_=target_type)
 
 
 def scroll(conn, type, q=None, page_size=1000, limit=None, keepalive="1m"):
