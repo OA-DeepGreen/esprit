@@ -67,7 +67,7 @@ class ESSnapshotsClient(object):
             raise FailedSnapshotException('Snapshot for {} has failed'.format(datetime.utcnow().date()))
 
     def delete_snapshot(self, snapshot):
-        resp = requests.delete(self.snapshots_url + '/' + snapshot.name, timeout=300)
+        resp = requests.delete(self.snapshots_url + '/' + snapshot.name, timeout=600)
         return resp.status_code == 200
 
     def prune_snapshots(self, ttl_days, delete_callback=None):
