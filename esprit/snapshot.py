@@ -88,9 +88,7 @@ class ESSnapshotsClient(object):
         :return: The status code of the response to our delete request
         """
         resp = requests.delete(self.snapshots_url + '/' + snapshot.name, timeout=600)
-
-        # Return success if we get a 2xx response
-        return 200 <= resp.status_code < 300
+        return resp.status_code
 
     def prune_snapshots(self, ttl_days, delete_callback=None):
         """
@@ -106,9 +104,14 @@ class ESSnapshotsClient(object):
         results = []
         for snapshot in snapshots:
             if snapshot.datetime < datetime.utcnow() - timedelta(days=ttl_days):
-                results.append(self.delete_snapshot(snapshot))
+                status_code = self.delete_snapshot(snapshot)
+
+                # Log a success if we get a 2xx response
+                results.append(200 <= status_code < 300)
+
+                # Run the callback if there is one
                 if delete_callback:
-                    delete_callback(snapshot, results[-1])
+                    delete_callback(snapshot, status_code, results[-1])
 
         # Our snapshots list is outdated, invalidate it
         self.snapshots = []
