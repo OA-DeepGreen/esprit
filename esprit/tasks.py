@@ -12,7 +12,8 @@ def bulk_load(conn, type, source_file, limit=None, batch_size=100000):
         while True:
             data = ""
             count = 0
-            while count < batch_size and total < limit:
+            within_limit = True if limit is None else total < limit
+            while count < batch_size and within_limit:
                 meta = f.readline()
                 record = f.readline()
                 if meta == "" or record == "":
