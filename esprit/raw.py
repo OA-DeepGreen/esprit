@@ -369,6 +369,10 @@ def bulk(connection, records, idkey='id', type_=''):
     resp = _do_post(url, connection, data=data)
     return resp
 
+def raw_bulk(connection, data, type=""):
+    url = elasticsearch_url(connection, type, endpoint="_bulk")
+    resp = _do_post(url, connection, data=data)
+    return resp
 
 ############################################################
 # Delete records

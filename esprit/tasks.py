@@ -1,9 +1,32 @@
 from esprit import raw, models
-import json, sys, time
+import json, sys, time, codecs
 
 
 class ScrollException(Exception):
     pass
+
+def bulk_load(conn, type, source_file, limit=None, batch_size=100000):
+    with codecs.open(source_file, "rb", "utf-8") as f:
+        total = 0
+        eof = False
+        while True:
+            data = ""
+            count = 0
+            while count < batch_size and total < limit:
+                meta = f.readline()
+                record = f.readline()
+                if meta == "" or record == "":
+                    eof = True
+                    break
+                data += meta
+                data += record
+                count += 1
+                total += 1
+            raw.raw_bulk(conn, data, type)
+            if total >= limit:
+                break
+            if eof:
+                break
 
 
 def copy(source_conn, source_type, target_conn, target_type, limit=None, batch_size=1000, method="POST", q=None):
