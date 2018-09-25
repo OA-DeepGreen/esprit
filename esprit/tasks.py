@@ -5,33 +5,23 @@ import json, sys, time, codecs
 class ScrollException(Exception):
     pass
 
-def bulk_load(conn, type, source_file, limit=None, batch_size=100000, old_index=None):
-    rep = None
-    sub = None
-    if old_index is not None:
-        rep = '"_index" : "' + old_index + '"'
-        sub = '"_index" : "' + conn.index + '"'
-
+def bulk_load(conn, type, source_file, limit=None, batch_size=100000):
     with codecs.open(source_file, "rb", "utf-8") as f:
         total = 0
         eof = False
         while True:
-            data = ""
+            records = []
             count = 0
             within_limit = True if limit is None else total < limit
             while count < batch_size and within_limit:
-                meta = f.readline()
                 record = f.readline()
-                if meta == "" or record == "":
+                if record == "":
                     eof = True
                     break
-                if old_index is not None:
-                    meta = meta.replace(rep, sub)
-                data += meta
-                data += record
+                records.append(record)
                 count += 1
                 total += 1
-            raw.raw_bulk(conn, data, type)
+            raw.bulk(conn, records, type_=type)
             if total >= limit:
                 break
             if eof:
