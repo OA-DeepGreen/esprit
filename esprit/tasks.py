@@ -5,37 +5,6 @@ import json, sys, time, codecs, os
 class ScrollException(Exception):
     pass
 
-class LimitRowsFileStream():
-    def __init__(self, inner_stream, record_limit=None, max_bytes=None):
-        self._inner_stream = inner_stream
-        self._current_line = 0
-        self._max_bytes = 0
-        self._limit = record_limit
-
-        count = 0
-        for line in self._inner_stream:
-            if count >= record_limit:
-                break
-            count += 1
-            self._max_bytes += len(line.encode('utf-8'))
-        self._inner_stream.seek(0)
-
-    def read(self, size=None):
-        if size is None:
-            if self._inner_stream.tell() >= self._max_bytes:
-                return ""
-            size = self._max_bytes
-        else:
-            if self._inner_stream.tell() + size > self._max_bytes:
-                size = self._max_bytes - self._inner_stream.tell()
-        self._inner_stream.read(size)
-
-    def readline(self, size=None):
-        raise Exception("Not implemented")
-
-    def readlines(self):
-        raise Exception("Not implemented")
-
 
 def bulk_load(conn, type, source_file, limit=None, max_content_length=100000000):
     source_size = os.path.getsize(source_file)
@@ -45,10 +14,24 @@ def bulk_load(conn, type, source_file, limit=None, max_content_length=100000000)
             # we can just serve it directly
             raw.raw_bulk(conn, f, type)
         else:
+            count = 0
             while True:
                 chunk = _make_next_chunk(f, max_content_length)
                 if chunk == "":
                     break
+
+                if limit is not None:
+                    newlines = chunk.count("\n")
+                    records = newlines / 2
+                    if count + records > limit:
+                        max = (limit - count) * 2
+                        lines = chunk.split("\n")
+                        allowed = lines[:max]
+                        chunk = "\n".join(allowed) + "\n"
+                        count += max
+                    else:
+                        count += records
+
                 raw.raw_bulk(conn, chunk, type)
 
 
