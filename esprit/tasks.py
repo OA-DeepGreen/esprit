@@ -1,12 +1,12 @@
 from esprit import raw, models
-import json, sys, time, codecs
+import json, sys, time, codecs, os
 
 
 class ScrollException(Exception):
     pass
 
 class LimitRowsFileStream():
-    def __init__(self, inner_stream, record_limit=None):
+    def __init__(self, inner_stream, record_limit=None, max_bytes=None):
         self._inner_stream = inner_stream
         self._current_line = 0
         self._max_bytes = 0
@@ -37,13 +37,32 @@ class LimitRowsFileStream():
         raise Exception("Not implemented")
 
 
-def bulk_load(conn, type, source_file, limit=None):
+def bulk_load(conn, type, source_file, limit=None, max_content_length=100000000, temp_file=None):
+    source_size = os.path.getsize(source_file)
     with codecs.open(source_file, "rb", "utf-8") as f:
-        if limit is None:
+        if limit is None and source_size < max_content_length:
+            # if we aren't selecting a portion of the file, and the file is below the max content length, then
+            # we can just serve it directly
             raw.raw_bulk(conn, f, type)
         else:
-            stream = LimitRowsFileStream(f, limit * 2)
-            raw.raw_bulk(conn, stream, type)
+            while True:
+                chunk = _make_next_chunk(f, max_content_length)
+                if chunk == "":
+                    break
+                raw.raw_bulk(conn, chunk, type)
+
+def _make_next_chunk(f, max_content_length):
+    chunk = f.read(max_content_length)
+    last_line_idx = chunk.rfind("\n")
+    new_end = last_line_idx + 1
+    if chunk[new_end:].startswith('{"index": {"_id": '):
+        chunk = chunk[:new_end]
+    else:
+        second_last_line_idx = chunk.rfind("\n", 0, last_line_idx)
+        new_end = second_last_line_idx + 1
+        chunk = chunk[:new_end]
+    f.seek(new_end)
+    return chunk
 
 
 def copy(source_conn, source_type, target_conn, target_type, limit=None, batch_size=1000, method="POST", q=None):
