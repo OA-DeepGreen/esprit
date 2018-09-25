@@ -5,27 +5,22 @@ import json, sys, time, codecs
 class ScrollException(Exception):
     pass
 
-def bulk_load(conn, type, source_file, limit=None, batch_size=100000):
+def bulk_load(conn, type, source_file, limit=None):
     with codecs.open(source_file, "rb", "utf-8") as f:
-        total = 0
-        eof = False
-        while True:
-            records = []
+        if limit is None:
+            raw.raw_bulk(conn, f, type)
+        else:
+            data = ""
             count = 0
-            within_limit = True if limit is None else total < limit
-            while count < batch_size and within_limit:
+            while count < limit:
+                meta = f.readline()
                 record = f.readline()
-                if record == "":
-                    eof = True
+                if meta == "" or record == "":
                     break
-                records.append(record)
+                data += meta
+                data += record
                 count += 1
-                total += 1
-            raw.bulk(conn, records, type_=type)
-            if total >= limit:
-                break
-            if eof:
-                break
+            raw.raw_bulk(conn, data, type)
 
 
 def copy(source_conn, source_type, target_conn, target_type, limit=None, batch_size=1000, method="POST", q=None):
@@ -115,14 +110,25 @@ def iterate(conn, type, q, page_size=1000, limit=None, method="POST"):
         q["from"] += page_size
 
 
-def dump(conn, type, q=None, page_size=1000, limit=None, method="POST", out=None, transform=None, es_bulk_format=True, idkey='id'):
+def dump(conn, type, q=None, page_size=1000, limit=None, method="POST", out=None, transform=None, es_bulk_format=True, idkey='id', es_bulk_fields=None):
     q = q if q is not None else {"query": {"match_all": {}}}
     out = out if out is not None else sys.stdout
     for record in iterate(conn, type, q, page_size=page_size, limit=limit, method=method):
         if transform is not None:
             record = transform(record)
         if es_bulk_format:
-            out.write(raw.to_bulk_single_rec(record, idkey=idkey, index=conn.index, type_=type))
+            kwargs = {}
+            if es_bulk_fields is None:
+                es_bulk_fields = ["_id", "_index", "_type"]
+            else:
+                for key in es_bulk_fields:
+                    if key == "_id":
+                        kwargs["idkey"] = idkey
+                    if key == "_index":
+                        kwargs["index"] = conn.index
+                    if key == "_type":
+                        kwargs["type_"] = type
+            out.write(raw.to_bulk_single_rec(record, **kwargs))
         else:
             out.write(json.dumps(record) + "\n")
 
