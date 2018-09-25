@@ -37,7 +37,7 @@ class LimitRowsFileStream():
         raise Exception("Not implemented")
 
 
-def bulk_load(conn, type, source_file, limit=None, max_content_length=100000000, temp_file=None):
+def bulk_load(conn, type, source_file, limit=None, max_content_length=100000000):
     source_size = os.path.getsize(source_file)
     with codecs.open(source_file, "rb", "utf-8") as f:
         if limit is None and source_size < max_content_length:
@@ -51,18 +51,28 @@ def bulk_load(conn, type, source_file, limit=None, max_content_length=100000000,
                     break
                 raw.raw_bulk(conn, chunk, type)
 
+
 def _make_next_chunk(f, max_content_length):
     chunk = f.read(max_content_length)
-    last_line_idx = chunk.rfind("\n")
-    new_end = last_line_idx + 1
-    if chunk[new_end:].startswith('{"index": {"_id": '):
-        chunk = chunk[:new_end]
+    if chunk.endswith("\n"):
+        last_line_idx = chunk.rfind("\n", 0, len(chunk) - 1) + 1
+        if not chunk[last_line_idx:].startswith('{"index": {"_id": '):
+            return chunk
+        else:
+            chunk = chunk[:last_line_idx]
+            f.seek(last_line_idx)
+            return chunk
     else:
-        second_last_line_idx = chunk.rfind("\n", 0, last_line_idx)
-        new_end = second_last_line_idx + 1
-        chunk = chunk[:new_end]
-    f.seek(new_end)
-    return chunk
+        last_line_idx = chunk.rfind("\n")
+        new_end = last_line_idx + 1
+        if chunk[new_end:].startswith('{"index": {"_id": '):
+            chunk = chunk[:new_end]
+        else:
+            second_last_line_idx = chunk.rfind("\n", 0, last_line_idx)
+            new_end = second_last_line_idx + 1
+            chunk = chunk[:new_end]
+        f.seek(new_end)
+        return chunk
 
 
 def copy(source_conn, source_type, target_conn, target_type, limit=None, batch_size=1000, method="POST", q=None):
