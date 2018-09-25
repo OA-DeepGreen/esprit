@@ -5,22 +5,45 @@ import json, sys, time, codecs
 class ScrollException(Exception):
     pass
 
+class LimitRowsFileStream():
+    def __init__(self, inner_stream, record_limit=None):
+        self._inner_stream = inner_stream
+        self._current_line = 0
+        self._max_bytes = 0
+        self._limit = record_limit
+
+        count = 0
+        for line in self._inner_stream:
+            if count >= record_limit:
+                break
+            count += 1
+            self._max_bytes += len(line.encode('utf-8'))
+        self._inner_stream.seek(0)
+
+    def read(self, size=None):
+        if size is None:
+            if self._inner_stream.tell() >= self._max_bytes:
+                return ""
+            size = self._max_bytes
+        else:
+            if self._inner_stream.tell() + size > self._max_bytes:
+                size = self._max_bytes - self._inner_stream.tell()
+        self._inner_stream.read(size)
+
+    def readline(self, size=None):
+        raise Exception("Not implemented")
+
+    def readlines(self):
+        raise Exception("Not implemented")
+
+
 def bulk_load(conn, type, source_file, limit=None):
     with codecs.open(source_file, "rb", "utf-8") as f:
         if limit is None:
             raw.raw_bulk(conn, f, type)
         else:
-            data = ""
-            count = 0
-            while count < limit:
-                meta = f.readline()
-                record = f.readline()
-                if meta == "" or record == "":
-                    break
-                data += meta
-                data += record
-                count += 1
-            raw.raw_bulk(conn, data, type)
+            stream = LimitRowsFileStream(f, limit * 2)
+            raw.raw_bulk(conn, stream, type)
 
 
 def copy(source_conn, source_type, target_conn, target_type, limit=None, batch_size=1000, method="POST", q=None):
