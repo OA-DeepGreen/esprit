@@ -20,6 +20,7 @@ def bulk_load(conn, type, source_file, limit=None, max_content_length=100000000)
                 if chunk == "":
                     break
 
+                finished = False
                 if limit is not None:
                     newlines = chunk.count("\n")
                     records = newlines / 2
@@ -29,13 +30,19 @@ def bulk_load(conn, type, source_file, limit=None, max_content_length=100000000)
                         allowed = lines[:max]
                         chunk = "\n".join(allowed) + "\n"
                         count += max
+                        finished = True
                     else:
                         count += records
 
-                raw.raw_bulk(conn, chunk, type)
+                resp = raw.raw_bulk(conn, chunk, type)
+                if resp.status_code != 200:
+                    raise Exception("did not get expected response")
+                if finished:
+                    break
 
 
 def _make_next_chunk(f, max_content_length):
+    offset = f.tell()
     chunk = f.read(max_content_length)
     if chunk.endswith("\n"):
         last_line_idx = chunk.rfind("\n", 0, len(chunk) - 1) + 1
@@ -43,7 +50,7 @@ def _make_next_chunk(f, max_content_length):
             return chunk
         else:
             chunk = chunk[:last_line_idx]
-            f.seek(last_line_idx)
+            f.seek(offset + last_line_idx)
             return chunk
     else:
         last_line_idx = chunk.rfind("\n")
@@ -54,7 +61,7 @@ def _make_next_chunk(f, max_content_length):
             second_last_line_idx = chunk.rfind("\n", 0, last_line_idx)
             new_end = second_last_line_idx + 1
             chunk = chunk[:new_end]
-        f.seek(new_end)
+        f.seek(offset + new_end)
         return chunk
 
 
