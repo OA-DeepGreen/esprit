@@ -152,28 +152,53 @@ def iterate(conn, type, q, page_size=1000, limit=None, method="POST"):
         q["from"] += page_size
 
 
-def dump(conn, type, q=None, page_size=1000, limit=None, method="POST", out=None, transform=None, es_bulk_format=True, idkey='id', es_bulk_fields=None):
+def dump(conn, type, q=None, page_size=1000, limit=None, method="POST", out=None, out_template=None, transform=None, es_bulk_format=True, idkey='id', es_bulk_fields=None, out_batch_sizes=100000):
     q = q if q is not None else {"query": {"match_all": {}}}
-    out = out if out is not None else sys.stdout
+
+    filenames = []
+    n = 1
+    current_file = None
+    if out_template is not None:
+        current_file = out_template + "." + str(n)
+        filenames.append(current_file)
+    if out is None and current_file is not None:
+        out = codecs.open(current_file, "wb", "utf-8")
+    else:
+        out = sys.stdout
+
+    count = 0
     for record in iterate(conn, type, q, page_size=page_size, limit=limit, method=method):
         if transform is not None:
             record = transform(record)
+
+        data = ""
         if es_bulk_format:
             kwargs = {}
             if es_bulk_fields is None:
                 es_bulk_fields = ["_id", "_index", "_type"]
-            else:
-                for key in es_bulk_fields:
-                    if key == "_id":
-                        kwargs["idkey"] = idkey
-                    if key == "_index":
-                        kwargs["index"] = conn.index
-                    if key == "_type":
-                        kwargs["type_"] = type
-            out.write(raw.to_bulk_single_rec(record, **kwargs))
+            for key in es_bulk_fields:
+                if key == "_id":
+                    kwargs["idkey"] = idkey
+                if key == "_index":
+                    kwargs["index"] = conn.index
+                if key == "_type":
+                    kwargs["type_"] = type
+            data = raw.to_bulk_single_rec(record, **kwargs)
         else:
-            out.write(json.dumps(record) + "\n")
+            data = json.dumps(record) + "\n"
 
+        out.write(data)
+        if out_template is not None:
+            count += 1
+            if count > out_batch_sizes:
+                count = 0
+                n += 1
+                current_file = out_template + "." + str(n)
+                filenames.append(current_file)
+                out.close()
+                out = codecs.open(current_file, "wb", "utf-8")
+
+        return filenames
 
 def create_alias(conn, alias):
     actions = raw.to_alias_actions(add=[{"alias": alias, "index": conn.index}])
