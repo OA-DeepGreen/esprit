@@ -152,7 +152,11 @@ def iterate(conn, type, q, page_size=1000, limit=None, method="POST"):
         q["from"] += page_size
 
 
-def dump(conn, type, q=None, page_size=1000, limit=None, method="POST", out=None, out_template=None, transform=None, es_bulk_format=True, idkey='id', es_bulk_fields=None, out_batch_sizes=100000):
+def dump(conn, type, q=None, page_size=1000, limit=None, method="POST",
+         out=None, out_template=None, out_batch_sizes=100000, out_rollover_callback=None,
+         transform=None,
+         es_bulk_format=True, idkey='id', es_bulk_fields=None):
+
     q = q if q is not None else {"query": {"match_all": {}}}
 
     filenames = []
@@ -191,11 +195,14 @@ def dump(conn, type, q=None, page_size=1000, limit=None, method="POST", out=None
         if out_template is not None:
             count += 1
             if count > out_batch_sizes:
+                out.close()
+                if out_rollover_callback is not None:
+                    out_rollover_callback(current_file)
+
                 count = 0
                 n += 1
                 current_file = out_template + "." + str(n)
                 filenames.append(current_file)
-                out.close()
                 out = codecs.open(current_file, "wb", "utf-8")
 
     return filenames
