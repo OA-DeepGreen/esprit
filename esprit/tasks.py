@@ -13,6 +13,7 @@ def bulk_load(conn, type, source_file, limit=None, max_content_length=100000000)
             # if we aren't selecting a portion of the file, and the file is below the max content length, then
             # we can just serve it directly
             raw.raw_bulk(conn, f, type)
+            return -1
         else:
             count = 0
             while True:
@@ -39,7 +40,10 @@ def bulk_load(conn, type, source_file, limit=None, max_content_length=100000000)
                     raise Exception("did not get expected response")
                 if finished:
                     break
-
+            if limit is not None:
+                return count
+            else:
+                return -1
 
 def _make_next_chunk(f, max_content_length):
     offset = f.tell()
