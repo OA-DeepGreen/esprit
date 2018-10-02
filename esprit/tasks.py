@@ -205,6 +205,11 @@ def dump(conn, type, q=None, page_size=1000, limit=None, method="POST",
                 filenames.append(current_file)
                 out = codecs.open(current_file, "wb", "utf-8")
 
+    if out_template is not None:
+        out.close()
+    if out_rollover_callback is not None:
+        out_rollover_callback(current_file)
+
     return filenames
 
 def create_alias(conn, alias):
