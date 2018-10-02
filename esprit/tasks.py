@@ -198,7 +198,7 @@ def dump(conn, type, q=None, page_size=1000, limit=None, method="POST", out=None
                 out.close()
                 out = codecs.open(current_file, "wb", "utf-8")
 
-        return filenames
+    return filenames
 
 def create_alias(conn, alias):
     actions = raw.to_alias_actions(add=[{"alias": alias, "index": conn.index}])
