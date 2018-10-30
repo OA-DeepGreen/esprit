@@ -347,7 +347,7 @@ def store(connection, type, record, id=None, params=None):
 def to_bulk(records, idkey="id", index='', type_=''):
     data = ''
     for r in records:
-        to_bulk_single_rec(r, idkey=idkey, index=index, type_=type_)
+        data += to_bulk_single_rec(r, idkey=idkey, index=index, type_=type_)
     return data
 
 
@@ -368,6 +368,7 @@ def bulk(connection, records, idkey='id', type_=''):
     url = elasticsearch_url(connection, type_, endpoint="_bulk")
     resp = _do_post(url, connection, data=data)
     return resp
+
 
 def raw_bulk(connection, data, type=""):
     url = elasticsearch_url(connection, type, endpoint="_bulk")
