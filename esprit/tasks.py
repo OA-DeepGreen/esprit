@@ -37,7 +37,7 @@ def bulk_load(conn, type, source_file, limit=None, max_content_length=100000000)
 
                 resp = raw.raw_bulk(conn, chunk, type)
                 if resp.status_code != 200:
-                    raise Exception("did not get expected response")
+                    raise Exception("did not get expected response: " + str(resp.status_code) + " - " + resp.text)
                 if finished:
                     break
             if limit is not None:
@@ -45,28 +45,60 @@ def bulk_load(conn, type, source_file, limit=None, max_content_length=100000000)
             else:
                 return -1
 
+def make_bulk_chunk_files(source_file, out_file_prefix, max_content_length=100000000):
+    source_size = os.path.getsize(source_file)
+    with codecs.open(source_file, "rb", "utf-8") as f:
+        if source_size < max_content_length:
+            return [source_file]
+        else:
+            filenames = []
+            count = 0
+            while True:
+                count += 1
+                chunk = _make_next_chunk(f, max_content_length)
+                if chunk == "":
+                    break
+
+                filename = out_file_prefix + "." + str(count)
+                with codecs.open(filename, "wb") as g:
+                    g.write(chunk)
+                filenames.append(filename)
+
+            return filenames
+
 def _make_next_chunk(f, max_content_length):
+
+    def is_command(line):
+        try:
+            command = json.loads(line)
+        except:
+            return False
+        keys = command.keys()
+        if len(keys) > 1:
+            return False
+        if "index" not in keys:
+            return False
+        subkeys = command["index"].keys()
+        for sk in subkeys:
+            if sk not in ["_id"]:
+                return False
+
+        return True
+
     offset = f.tell()
     chunk = f.read(max_content_length)
-    if chunk.endswith("\n"):
-        last_line_idx = chunk.rfind("\n", 0, len(chunk) - 1) + 1
-        if not chunk[last_line_idx:].startswith('{"index": {"_id": '):
+    while True:
+        last_newline = chunk.rfind("\n")
+        tail = chunk[last_newline + 1:]
+        chunk = chunk[:last_newline]
+
+        if is_command(tail):
+            f.seek(offset + last_newline)
+            if chunk.startswith("\n"):
+                chunk = chunk[1:]
             return chunk
         else:
-            chunk = chunk[:last_line_idx]
-            f.seek(offset + last_line_idx)
-            return chunk
-    else:
-        last_line_idx = chunk.rfind("\n")
-        new_end = last_line_idx + 1
-        if chunk[new_end:].startswith('{"index": {"_id": '):
-            chunk = chunk[:new_end]
-        else:
-            second_last_line_idx = chunk.rfind("\n", 0, last_line_idx)
-            new_end = second_last_line_idx + 1
-            chunk = chunk[:new_end]
-        f.seek(offset + new_end)
-        return chunk
+            continue
 
 
 def copy(source_conn, source_type, target_conn, target_type, limit=None, batch_size=1000, method="POST", q=None):
