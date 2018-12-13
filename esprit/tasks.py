@@ -123,8 +123,6 @@ def scroll(conn, type, q=None, page_size=1000, limit=None, keepalive="1m"):
         q = {"query": {"match_all": {}}}
     if "size" not in q:
         q["size"] = page_size
-    if "sort" not in q:
-        q["sort"] = [{"_uid": {"order": "asc"}}]
 
     resp = raw.initialise_scroll(conn, type, q, keepalive)
     if resp.status_code != 200:
