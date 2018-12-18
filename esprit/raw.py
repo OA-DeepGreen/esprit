@@ -356,7 +356,13 @@ def to_bulk(records, idkey="id", index='', type_='', bulk_type="index", **kwargs
 
 def to_bulk_single_rec(record, idkey="id", index='', type_='', bulk_type="index", **kwargs):
     data = ''
-    datadict = {bulk_type: {'_id': record[idkey]}}
+
+    idpath = idkey.split(".")
+    context = record
+    for pathseg in idpath:
+        context = context[pathseg]
+
+    datadict = {bulk_type: {'_id': context}}
     if index:
         datadict[bulk_type]['_index'] = index
     if type_:
