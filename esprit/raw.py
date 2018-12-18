@@ -181,8 +181,11 @@ def get_facet_terms(json_result, facet_name):
 # Scroll search
 
 
-def initialise_scroll(connection, type=None, query=None, keepalive="1m"):
-    return search(connection, type, query, url_params={"scroll": keepalive})
+def initialise_scroll(connection, type=None, query=None, keepalive="1m", scan=False):
+    url_params = {"scroll" : keepalive}
+    if scan:
+        url_params["search_type"] = "scan"
+    return search(connection, type, query, url_params=url_params)
 
 
 def scroll_next(connection, scroll_id, keepalive="1m"):
@@ -344,27 +347,30 @@ def store(connection, type, record, id=None, params=None):
     return resp
 
 
-def to_bulk(records, idkey="id", index='', type_=''):
+def to_bulk(records, idkey="id", index='', type_='', bulk_type="index", **kwargs):
     data = ''
     for r in records:
-        data += to_bulk_single_rec(r, idkey=idkey, index=index, type_=type_)
+        data += to_bulk_single_rec(r, idkey=idkey, index=index, type_=type_, bulk_type=bulk_type, **kwargs)
     return data
 
 
-def to_bulk_single_rec(record, idkey="id", index='', type_=''):
+def to_bulk_single_rec(record, idkey="id", index='', type_='', bulk_type="index", **kwargs):
     data = ''
-    datadict = {'index': {'_id': record[idkey]}}
+    datadict = {bulk_type: {'_id': record[idkey]}}
     if index:
-        datadict['index']['_index'] = index
+        datadict[bulk_type]['_index'] = index
     if type_:
-        datadict['index']['_type'] = type_
+        datadict[bulk_type]['_type'] = type_
+
+    datadict[bulk_type].update(kwargs)
+
     data += json.dumps(datadict) + '\n'
     data += json.dumps(record) + '\n'
     return data
 
 
-def bulk(connection, records, idkey='id', type_=''):
-    data = to_bulk(records, idkey=idkey)
+def bulk(connection, records, idkey='id', type_='', bulk_type="index", **kwargs):
+    data = to_bulk(records, idkey=idkey, bulk_type=bulk_type, **kwargs)
     url = elasticsearch_url(connection, type_, endpoint="_bulk")
     resp = _do_post(url, connection, data=data)
     return resp
@@ -374,6 +380,8 @@ def raw_bulk(connection, data, type=""):
     url = elasticsearch_url(connection, type, endpoint="_bulk")
     resp = _do_post(url, connection, data=data)
     return resp
+
+
 
 ############################################################
 # Delete records

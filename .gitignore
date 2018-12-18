@@ -6,3 +6,4 @@ src*
 build/*
 dist/*
 .idea/
+scratch.py
