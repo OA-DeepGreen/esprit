@@ -55,12 +55,12 @@ class ESSnapshotsClient(object):
     def request_snapshot(self, snapshot_name=None):
         """
         Request the elasticsearch snapshot plugin to create a snapshot
-        :param snapshot_name a string to name the snapshot. Defaults to UTC timestamp e.g. 2019-01-26T1602Z
+        :param snapshot_name a string to name the snapshot. Defaults to UTC timestamp e.g. 2019-01-26_1602z
         :return: The status code of the response
         """
-        name = snapshot_name if snapshot_name is not None else datetime.strftime(datetime.utcnow(), "%Y-%m-%dT%H%MZ")
+        name = snapshot_name if snapshot_name is not None else datetime.strftime(datetime.utcnow(), "%Y-%m-%d_%H%Mz")
         resp = requests.put(self.snapshots_url + '/' + name, timeout=600)
-        return resp.status_code
+        return resp
 
     def list_snapshots(self):
         """
@@ -98,7 +98,7 @@ class ESSnapshotsClient(object):
         :return: The status code of the response to our delete request
         """
         resp = requests.delete(self.snapshots_url + '/' + snapshot.name, timeout=600)
-        return resp.status_code
+        return resp
 
     def prune_snapshots(self, ttl_days, delete_callback=None):
         """
@@ -114,7 +114,7 @@ class ESSnapshotsClient(object):
         results = []
         for snapshot in snapshots:
             if snapshot.datetime < datetime.utcnow() - timedelta(days=ttl_days):
-                status_code = self.delete_snapshot(snapshot)
+                status_code = self.delete_snapshot(snapshot).status_code
 
                 # Log a success if we get a 2xx response
                 results.append(200 <= status_code < 300)
