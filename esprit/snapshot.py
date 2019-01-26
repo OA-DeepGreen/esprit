@@ -52,6 +52,16 @@ class ESSnapshotsClient(object):
         connection.index = '_snapshot'
         self.snapshots_url = elasticsearch_url(connection, type=snapshot_repository)
 
+    def request_snapshot(self, snapshot_name=None):
+        """
+        Request the elasticsearch snapshot plugin to create a snapshot
+        :param snapshot_name a string to name the snapshot. Defaults to UTC timestamp e.g. 2019-01-26T1602Z
+        :return: The status code of the response
+        """
+        name = snapshot_name if snapshot_name is not None else datetime.strftime(datetime.utcnow(), "%Y-%m-%dT%H%MZ")
+        resp = requests.put(self.snapshots_url + '/' + name, timeout=600)
+        return resp.status_code
+
     def list_snapshots(self):
         """
         Return a list of all snapshots in the S3 repository
