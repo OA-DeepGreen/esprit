@@ -12,6 +12,8 @@ class ESWireException(Exception):
     def __str__(self):
         return repr(self.value)
 
+class BulkException(Exception):
+    pass
 
 DEFAULT_VERSION = "0.90.13"
 
@@ -363,7 +365,10 @@ def to_bulk_single_rec(record, idkey="id", index='', type_='', bulk_type="index"
     idpath = idkey.split(".")
     context = record
     for pathseg in idpath:
-        context = context[pathseg]
+        if pathseg in context:
+            context = context[pathseg]
+        else:
+            raise BulkException("'{0}' not available in record to generate bulk _id: {1}".format(idkey, json.dumps(record)))
 
     datadict = {bulk_type: {'_id': context}}
     if index:
