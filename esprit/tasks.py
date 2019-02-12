@@ -5,6 +5,12 @@ import json, sys, time, codecs, os
 class ScrollException(Exception):
     pass
 
+class ScrollInitialiseException(ScrollException):
+    pass
+
+class ScrollTimeoutException(ScrollException):
+    pass
+
 
 def bulk_load(conn, type, source_file, limit=None, max_content_length=100000000):
     source_size = os.path.getsize(source_file)
@@ -127,10 +133,11 @@ def scroll(conn, type, q=None, page_size=1000, limit=None, keepalive="1m", scan=
     resp = raw.initialise_scroll(conn, type, q, keepalive, scan)
     if resp.status_code != 200:
         # something went wrong initialising the scroll
-        raise ScrollException("Unable to initialise scroll - could be your mappings are broken")
+        raise ScrollInitialiseException("Unable to initialise scroll - could be your mappings are broken")
 
     # otherwise, carry on
     results, scroll_id = raw.unpack_scroll(resp)
+    total_results = raw.total_results(resp)
 
     counter = 0
     for r in results:
@@ -145,13 +152,20 @@ def scroll(conn, type, q=None, page_size=1000, limit=None, keepalive="1m", scan=
         if limit is not None and counter >= int(limit):
             break
 
+        # if we consumed all the results we were expecting, we can just stop here
+        if counter >= total_results:
+            break
+
+        # get the next page and check that we haven't timed out
         sresp = raw.scroll_next(conn, scroll_id, keepalive=keepalive)
         if raw.scroll_timedout(sresp):
-            raise ScrollException("Scroll timed out - you probably need to raise the keepalive value")
-        results = raw.unpack_result(sresp)
+            raise ScrollTimeoutException("Scroll timed out - you probably need to raise the keepalive value")
 
+        # if we didn't get any results back, this also means we're at the end
+        results = raw.unpack_result(sresp)
         if len(results) == 0:
             break
+
         for r in results:
             # apply the limit (again)
             if limit is not None and counter >= int(limit):

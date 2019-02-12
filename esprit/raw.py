@@ -241,6 +241,9 @@ def unpack_mget(requests_response):
     objects = [i.get("_source") if "_source" in i else i.get("fields") for i in j.get("docs")]
     return objects
 
+def total_results(requests_response):
+    j = requests_response.json()
+    return j.get("hits", {}).get("total", 0)
 
 ####################################################################
 # Mappings
