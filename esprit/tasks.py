@@ -159,7 +159,10 @@ def scroll(conn, type, q=None, page_size=1000, limit=None, keepalive="1m", scan=
         # get the next page and check that we haven't timed out
         sresp = raw.scroll_next(conn, scroll_id, keepalive=keepalive)
         if raw.scroll_timedout(sresp):
-            raise ScrollTimeoutException("Scroll timed out - you probably need to raise the keepalive value")
+            status = sresp.status_code
+            message = sresp.text
+            ex = "Scroll timed out; {status} - {message}".format(status, message)
+            raise ScrollTimeoutException(ex)
 
         # if we didn't get any results back, this also means we're at the end
         results = raw.unpack_result(sresp)
