@@ -76,7 +76,7 @@ class ESSnapshotsClient(object):
                 try:
                     snap_objs = [ESSnapshot(s) for s in resp.json()['snapshots']]
                 except Exception as e:
-                    raise BadSnapshotMetaException("Error creating snapshot object: " + e.message + ";")
+                    raise BadSnapshotMetaException("Error creating snapshot object: ") from e
 
                 # Sort the snapshots old to new
                 self.snapshots = sorted(snap_objs, key=lambda x: x.datetime)
@@ -126,6 +126,6 @@ class ESSnapshotsClient(object):
         # Our snapshots list is outdated, invalidate it
         self.snapshots = []
 
-        print "snapshots prune results: {}".format(results)
+        print("snapshots prune results: {}".format(results))
         if not all(results):
             raise SnapshotDeleteException('Not all snapshots were deleted successfully.')

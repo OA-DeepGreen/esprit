@@ -18,7 +18,7 @@ def make_dynamic_templates(entries):
 
 def make_field(type, fields=None, **kwargs):
     fm = {"type": type}
-    for k, v in kwargs.iteritems():
+    for k, v in kwargs.items():
         fm[k] = v
     if fields is not None:
         fm["fields"] = fields
@@ -27,7 +27,7 @@ def make_field(type, fields=None, **kwargs):
 
 def make_properties(paths_to_fields):
     props = {}
-    for path, field in paths_to_fields.iteritems():
+    for path, field in paths_to_fields.items():
         parts = path.split(".")
         context = props
         for i in range(len(parts)):

@@ -1,12 +1,15 @@
 from esprit import raw, models
 import json, sys, time, codecs, os
+from functools import reduce
 
 
 class ScrollException(Exception):
     pass
 
+
 class ScrollInitialiseException(ScrollException):
     pass
+
 
 class ScrollTimeoutException(ScrollException):
     pass
@@ -51,6 +54,7 @@ def bulk_load(conn, type, source_file, limit=None, max_content_length=100000000)
             else:
                 return -1
 
+
 def make_bulk_chunk_files(source_file, out_file_prefix, max_content_length=100000000):
     source_size = os.path.getsize(source_file)
     with codecs.open(source_file, "rb", "utf-8") as f:
@@ -72,19 +76,20 @@ def make_bulk_chunk_files(source_file, out_file_prefix, max_content_length=10000
 
             return filenames
 
+
 def _make_next_chunk(f, max_content_length):
 
     def is_command(line):
         try:
             command = json.loads(line)
-        except:
+        except (json.JSONDecodeError, TypeError):
             return False
-        keys = command.keys()
+        keys = list(command.keys())
         if len(keys) > 1:
             return False
         if "index" not in keys:
             return False
-        subkeys = command["index"].keys()
+        subkeys = list(command["index"].keys())
         for sk in subkeys:
             if sk not in ["_id"]:
                 return False
@@ -114,11 +119,11 @@ def copy(source_conn, source_type, target_conn, target_type, limit=None, batch_s
     for r in iterate(source_conn, source_type, q, page_size=batch_size, limit=limit, method=method):
         batch.append(r)
         if len(batch) >= batch_size:
-            print "writing batch of", len(batch)
+            print("writing batch of", len(batch))
             raw.bulk(target_conn, batch, type_=target_type)
             batch = []
     if len(batch) > 0:
-        print "writing batch of", len(batch)
+        print("writing batch of", len(batch))
         raw.bulk(target_conn, batch, type_=target_type)
 
 
@@ -161,8 +166,7 @@ def scroll(conn, type, q=None, page_size=1000, limit=None, keepalive="1m", scan=
         if raw.scroll_timedout(sresp):
             status = sresp.status_code
             message = sresp.text
-            ex = "Scroll timed out; {status} - {message}".format(status, message)
-            raise ScrollTimeoutException(ex)
+            raise ScrollTimeoutException(f"Scroll timed out; {status} - {message}")
 
         # if we didn't get any results back, this also means we're at the end
         results = raw.unpack_result(sresp)
@@ -226,7 +230,6 @@ def dump(conn, type, q=None, page_size=1000, limit=None, method="POST",
         if transform is not None:
             record = transform(record)
 
-        data = ""
         if es_bulk_format:
             kwargs = {}
             if es_bulk_fields is None:
@@ -263,15 +266,16 @@ def dump(conn, type, q=None, page_size=1000, limit=None, method="POST",
 
     return filenames
 
+
 def create_alias(conn, alias):
     actions = raw.to_alias_actions(add=[{"alias": alias, "index": conn.index}])
-    print "Alias create reply: ", raw.post_alias(conn, actions).json()
+    print("Alias create reply: ", raw.post_alias(conn, actions).json())
 
 
 def repoint_alias(old_conn, new_conn, alias):
     actions = raw.to_alias_actions(add=[{"alias": alias, "index": new_conn.index}],
                                    remove=[{"alias": alias, "index": old_conn.index}])
-    print "Alias re-point reply: ", raw.post_alias(new_conn, actions).json()
+    print("Alias re-point reply: ", raw.post_alias(new_conn, actions).json())
 
 
 def reindex(old_conn, new_conn, alias, types, new_mappings=None, new_version="0.90.13"):
@@ -289,30 +293,30 @@ def reindex(old_conn, new_conn, alias, types, new_mappings=None, new_version="0.
     if raw.alias_exists(new_conn, alias):
         raise Exception("Alias incorrectly set - check you have the connections the right way around.")
     elif not raw.alias_exists(old_conn, alias):
-        print "The specified alias {0} does not exist for index {1}. Creating it.".format(alias, old_conn.index)
+        print(f"The specified alias {alias} does not exist for index {old_conn.index}. Creating it.")
         create_alias(old_conn, alias)
     else:
-        print "Alias OK"
+        print("Alias OK")
 
     # Create a new index with the new mapping
     for t in types:
         r = raw.put_mapping(new_conn, type=t, mapping=new_mappings[t], make_index=True, es_version=new_version)
-        print "Creating ES Type+Mapping for", t, "; status:", r.status_code
-    print "Mapping OK"
+        print(f"Creating ES Type+Mapping for {t}; status: {r.status_code}")
+    print("Mapping OK")
     time.sleep(1)
 
     # Copy the data from old index to new index. The index should be unchanging (and may not have .exact) so don't use
     # keyword_subfield.
     for t in types:
-        print "Copying type {0}".format(t)
+        print(f"Copying type {t}")
         copy(old_conn, t, new_conn, t)
-    print "Copy OK"
+    print("Copy OK")
 
     time.sleep(1)
 
     # Switch alias to point to second index
     repoint_alias(old_conn, new_conn, alias)
-    print "Reindex complete."
+    print("Reindex complete.")
 
 
 def compare_index_counts(conns, types, q=None):
@@ -327,16 +331,16 @@ def compare_index_counts(conns, types, q=None):
     equal_counts = []
 
     for t in types:
-        print "\ntype:", t
+        print(f"\ntype: {t}")
         counts = []
         for c in conns:
             resp = raw.search(connection=c, type=t, query=q)
             try:
                 count = resp.json()["hits"]["total"]
                 counts.append(count)
-                print "index {0}: {1}".format(c.index, count)
+                print(f"index {c.index}: {count}")
             except KeyError:
-                print resp.json()
+                print(resp.json())
 
         equal_counts.append(reduce(lambda x, y: x == y, counts))
 
@@ -345,7 +349,7 @@ def compare_index_counts(conns, types, q=None):
 
 class JSONListWriter(object):
     def __init__(self, path):
-        self.f = open(path, "wb")
+        self.f = open(path, "w")
         self.f.write("[")
         self.first = True
 

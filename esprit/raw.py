@@ -1,7 +1,7 @@
 # The Raw ElasticSearch functions, no frills, just wrappers around the HTTP calls
 
-import requests, json, urllib
-from models import QueryBuilder
+import requests, json, urllib.request, urllib.parse, urllib.error
+from .models import QueryBuilder
 from esprit import versions
 
 
@@ -12,8 +12,10 @@ class ESWireException(Exception):
     def __str__(self):
         return repr(self.value)
 
+
 class BulkException(Exception):
     pass
+
 
 DEFAULT_VERSION = "0.90.13"
 
@@ -89,7 +91,7 @@ def elasticsearch_url(connection, type=None, endpoint=None, params=None, omit_in
     # FIXME: NOT URL SAFE - do this properly
     if params is not None:
         args = []
-        for k, v in params.iteritems():
+        for k, v in params.items():
             args.append(k + "=" + v)
         q = "&".join(args)
         url += "?" + q
@@ -161,7 +163,7 @@ def search(connection, type=None, query=None, method="POST", url_params=None):
         headers = {"content-type": "application/json"}
         resp = _do_post(url, connection, data=json.dumps(query), headers=headers)
     elif method == "GET":
-        resp = _do_get(url + "?source=" + urllib.quote_plus(json.dumps(query)), connection)
+        resp = _do_get(url + "?source=" + urllib.parse.quote_plus(json.dumps(query)), connection)
     return resp
 
 
@@ -184,7 +186,7 @@ def get_facet_terms(json_result, facet_name):
 
 
 def initialise_scroll(connection, type=None, query=None, keepalive="1m", scan=False):
-    url_params = {"scroll" : keepalive}
+    url_params = {"scroll": keepalive}
     if scan:
         url_params["search_type"] = "scan"
     return search(connection, type, query, url_params=url_params)
@@ -242,6 +244,7 @@ def unpack_mget(requests_response):
     j = requests_response.json()
     objects = [i.get("_source") if "_source" in i else i.get("fields") for i in j.get("docs")]
     return objects
+
 
 def total_results(requests_response):
     j = requests_response.json()
@@ -315,7 +318,7 @@ def alias_exists(connection, alias):
     aurl = elasticsearch_url(connection, endpoint="_aliases")
     resp = _do_get(aurl, connection)
     if index_exists(connection):
-        return alias in resp.json()[connection.index]['aliases'].keys()
+        return alias in list(resp.json()[connection.index]['aliases'].keys())
     else:
         return False
 
@@ -396,7 +399,6 @@ def raw_bulk(connection, data, type=""):
     return resp
 
 
-
 ############################################################
 # Delete records
 
@@ -468,5 +470,5 @@ def post_alias(connection, alias_actions):
 def list_types(connection):
     url = elasticsearch_url(connection, "_mapping")
     resp = _do_get(url, connection).json()
-    index = resp.keys()[0]
-    return resp[index]['mappings'].keys()
+    index = list(resp.keys())[0]
+    return list(resp[index]['mappings'].keys())

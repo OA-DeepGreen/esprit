@@ -12,6 +12,7 @@ def copy(source, source_type, target, target_type, limit=None, batch=1000):
 
     tasks.copy(sconn, source_type, tconn, target_type, limit, batch)
 
+
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
@@ -35,5 +36,5 @@ if __name__ == "__main__":
         target_type = args.targettype
         limit = args.limit if args.limit else None
         batch = args.batch if args.batch else 1000
-        print "copying with", source, source_type, target, target_type, "limit", limit, "batch size", batch
+        print("copying with", source, source_type, target, target_type, "limit", limit, "batch size", batch)
         copy(source, source_type, target, target_type, limit, batch)

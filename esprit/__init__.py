@@ -1,1 +1,1 @@
-import mappings, models, raw, dao, util, tasks, snapshot
+from . import mappings, models, raw, dao, util, tasks, snapshot
