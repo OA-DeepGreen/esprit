@@ -166,7 +166,7 @@ def scroll(conn, type, q=None, page_size=1000, limit=None, keepalive="1m", scan=
         if raw.scroll_timedout(sresp):
             status = sresp.status_code
             message = sresp.text
-            raise ScrollTimeoutException(f"Scroll timed out; {status} - {message}")
+            raise ScrollTimeoutException("Scroll timed out; {status} - {message}".format(status=status, message=message))
 
         # if we didn't get any results back, this also means we're at the end
         results = raw.unpack_result(sresp)
@@ -293,7 +293,7 @@ def reindex(old_conn, new_conn, alias, types, new_mappings=None, new_version="0.
     if raw.alias_exists(new_conn, alias):
         raise Exception("Alias incorrectly set - check you have the connections the right way around.")
     elif not raw.alias_exists(old_conn, alias):
-        print(f"The specified alias {alias} does not exist for index {old_conn.index}. Creating it.")
+        print("The specified alias {alias} does not exist for index {index}. Creating it.".format(alias=alias, index=old_conn.index))
         create_alias(old_conn, alias)
     else:
         print("Alias OK")
@@ -301,14 +301,14 @@ def reindex(old_conn, new_conn, alias, types, new_mappings=None, new_version="0.
     # Create a new index with the new mapping
     for t in types:
         r = raw.put_mapping(new_conn, type=t, mapping=new_mappings[t], make_index=True, es_version=new_version)
-        print(f"Creating ES Type+Mapping for {t}; status: {r.status_code}")
+        print("Creating ES Type+Mapping for {t}; status: {status_code}".format(t=t, status_code=r.status_code))
     print("Mapping OK")
     time.sleep(1)
 
     # Copy the data from old index to new index. The index should be unchanging (and may not have .exact) so don't use
     # keyword_subfield.
     for t in types:
-        print(f"Copying type {t}")
+        print("Copying type {t}".format(t=t))
         copy(old_conn, t, new_conn, t)
     print("Copy OK")
 
@@ -331,14 +331,14 @@ def compare_index_counts(conns, types, q=None):
     equal_counts = []
 
     for t in types:
-        print(f"\ntype: {t}")
+        print("\ntype: {t}".format(t=t))
         counts = []
         for c in conns:
             resp = raw.search(connection=c, type=t, query=q)
             try:
                 count = resp.json()["hits"]["total"]
                 counts.append(count)
-                print(f"index {c.index}: {count}")
+                print("index {index}: {count}".format(index=c.index, count=count))
             except KeyError:
                 print(resp.json())
 
