@@ -33,7 +33,7 @@ def bulk_load(conn, type, source_file, limit=None, max_content_length=100000000)
                 finished = False
                 if limit is not None:
                     newlines = chunk.count("\n")
-                    records = newlines / 2
+                    records = newlines // 2
                     if count + records > limit:
                         max = (limit - count) * 2
                         lines = chunk.split("\n")
