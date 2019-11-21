@@ -1,5 +1,5 @@
 from esprit import raw, models
-import json, sys, time, codecs, os
+import json, sys, time, os
 from functools import reduce
 
 
@@ -17,7 +17,7 @@ class ScrollTimeoutException(ScrollException):
 
 def bulk_load(conn, type, source_file, limit=None, max_content_length=100000000):
     source_size = os.path.getsize(source_file)
-    with codecs.open(source_file, "rb", "utf-8") as f:
+    with open(source_file, "r") as f:
         if limit is None and source_size < max_content_length:
             # if we aren't selecting a portion of the file, and the file is below the max content length, then
             # we can just serve it directly
@@ -57,7 +57,7 @@ def bulk_load(conn, type, source_file, limit=None, max_content_length=100000000)
 
 def make_bulk_chunk_files(source_file, out_file_prefix, max_content_length=100000000):
     source_size = os.path.getsize(source_file)
-    with codecs.open(source_file, "rb", "utf-8") as f:
+    with open(source_file, "r") as f:
         if source_size < max_content_length:
             return [source_file]
         else:
@@ -70,7 +70,7 @@ def make_bulk_chunk_files(source_file, out_file_prefix, max_content_length=10000
                     break
 
                 filename = out_file_prefix + "." + str(count)
-                with codecs.open(filename, "wb") as g:
+                with open(filename, "w") as g:
                     g.write(chunk)
                 filenames.append(filename)
 
@@ -221,7 +221,7 @@ def dump(conn, type, q=None, page_size=1000, limit=None, method="POST",
         current_file = out_template + "." + str(n)
         filenames.append(current_file)
     if out is None and current_file is not None:
-        out = codecs.open(current_file, "wb", "utf-8")
+        out = open(current_file, "w")
     else:
         out = sys.stdout
 
@@ -257,7 +257,7 @@ def dump(conn, type, q=None, page_size=1000, limit=None, method="POST",
                 n += 1
                 current_file = out_template + "." + str(n)
                 filenames.append(current_file)
-                out = codecs.open(current_file, "wb", "utf-8")
+                out = open(current_file, "w")
 
     if out_template is not None:
         out.close()
