@@ -61,15 +61,15 @@ class Query(object):
 class QueryBuilder(object):
     _match_all = {"query": {"match_all": {}}}
     _query_string = {"query": {"query_string": {"query": "<query string>"}}}
-    _term = {"query": {"term": {}}}                                                       # term : {"<key>" : "<value>"}
+    _term = {"query": {"term": {}}} # term : {"<key>" : "<value>"}
     
-    _terms_filter = {"query": {"filtered": {"filter": {"terms": {}}}}}                 # terms : {"<key>" : ["<value>"]}
-    _term_filter = {"query": {"filtered": {"filter": {"term": {}}}}}                     # terms : {"<key>" : "<value>"}
+    _terms_filter = {"query": {"filtered": {"filter": {"terms": {}}}}} # terms : {"<key>" : ["<value>"]}
+    _term_filter = {"query": {"filtered": {"filter": {"term": {}}}}} # terms : {"<key>" : "<value>"}
     
     _fields_constraint = {"fields": []}
     
     _special_chars = ["+", "-", "&&", "||", "!", "(", ")", "{", "}", "[", "]", "^", '"', "~", "*", "?", ":", "/"]
-    _escape_char = "\\"                                                      # which is a special special character too!
+    _escape_char = "\\" # which is a special special character too!
     
     @classmethod
     def match_all(cls):
@@ -121,7 +121,7 @@ class QueryBuilder(object):
     
     @classmethod
     def escape(cls, query_string):
-        qs = query_string.replace(cls._escape_char, cls._escape_char + cls._escape_char)        # escape the escape char
+        qs = query_string.replace(cls._escape_char, cls._escape_char + cls._escape_char) # escape the escape char
         for sc in cls._special_chars:
             qs = qs.replace(sc, cls._escape_char + sc)
         return qs

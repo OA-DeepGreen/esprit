@@ -64,7 +64,7 @@ class DAO(object):
             conn = self._get_connection()
 
         if type is None:
-            type = self._get_write_type()
+            type = self._get_write_type(type)
 
         if blocking and not updated:
             raise StoreException("Unable to do blocking save on record where last_updated is not set")
@@ -153,13 +153,7 @@ class DAO(object):
             conn = self._get_connection()
 
         # the record may be in any one of the read types, so we need to check them all
-        if type is not None:
-            if isinstance(type, list):
-                types = type
-            else:
-                types = [type]
-        else:
-            types = self._get_read_types()
+        types = self._get_read_types(type)
 
         # in the simple case of one type, just get on and issue the delete
         if len(types) == 1:
@@ -207,10 +201,10 @@ class DAO(object):
     def _get_connection(self):
         raise NotImplementedError()
 
-    def _get_write_type(self):
+    def _get_write_type(self, type=None):
         raise NotImplementedError()
 
-    def _get_read_types(self):
+    def _get_read_types(self, types=None):
         raise NotImplementedError()
 
 
@@ -228,11 +222,11 @@ class DomainObject(DAO):
     # somewhat messy type system
 
     # overrides of the instantiated DAO methods
-    def _get_write_type(self):
-        return self.get_write_type()
+    def _get_write_type(self, type=None):
+        return self.get_write_type(type)
 
-    def _get_read_types(self):
-        return self.get_read_types()
+    def _get_read_types(self, types=None):
+        return self.get_read_types(types=types)
 
     @classmethod
     def dynamic_read_types(cls):
