@@ -262,10 +262,12 @@ class DomainObject(DAO):
     ################################################
 
     @classmethod
-    def refresh(cls, conn=None):
+    def refresh(cls, conn=None, type=None):
         if conn is None:
             conn = cls.__conn__
-        raw.refresh(conn)
+        if type is None:
+            type = cls.__type__
+        raw.refresh(conn, type)
     
     @classmethod
     def pull(cls, id_, conn=None, wrap=True, types=None):
@@ -477,6 +479,19 @@ class DomainObject(DAO):
         raw.delete_by_query(conn, type, query, es_version=es_version)
 
     @classmethod
+    def bulk_delete(cls, ids, conn=None, type=None):
+        if conn is None:
+            conn = cls.__conn__
+        if type is None:
+            type = cls.__type__
+        raw.bulk_delete(conn, type, ids)
+
+    def delete_index_by_prefix(cls, index_prefix, conn=None):
+        if conn is None:
+            conn = cls.__conn__
+        raw.delete_index_by_prefix(conn, index_prefix)
+
+    @classmethod
     def iterate(cls, q, page_size=1000, limit=None, wrap=True, **kwargs):
         q = q.copy()
         q["size"] = page_size
@@ -518,10 +533,6 @@ class DomainObject(DAO):
 
     @classmethod
     def scroll(cls, q=None, page_size=1000, limit=None, keepalive="10m", conn=None, raise_on_scroll_error=True, types=None, wrap=True):
-    # 2018-12-19 TD : raise keepalive value to '10m'
-    #
-    # def scroll(cls, q=None, page_size=1000, limit=None, keepalive="1m", conn=None, raise_on_scroll_error=True, types=None, wrap=True):
-    #
         if conn is None:
             conn = cls.__conn__
         types = cls.get_read_types(types)
@@ -542,7 +553,7 @@ class DomainObject(DAO):
                 raise e
             else:
                 return
-    
+
 ########################################################################
 # Some useful ES queries
 ########################################################################

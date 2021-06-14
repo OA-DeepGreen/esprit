@@ -127,8 +127,6 @@ def copy(source_conn, source_type, target_conn, target_type, limit=None, batch_s
         raw.bulk(target_conn, batch, type_=target_type)
 
 
-# 2018-12-19 TD : raise keepalive value to '10m'
-# def scroll(conn, type, q=None, page_size=1000, limit=None, keepalive="1m", scan=False):
 def scroll(conn, type, q=None, page_size=1000, limit=None, keepalive="10m", scan=False):
     if q is not None:
         q = q.copy()
@@ -274,11 +272,24 @@ def create_alias(conn, alias):
     print("Alias create reply: ", raw.post_alias(conn, actions).json())
 
 
+def create_alias_index_type(conn, alias, t):
+    index = raw.type_to_index(conn, t)
+    actions = raw.to_alias_actions(add=[{"alias": alias, "index": index}])
+    print("Alias create reply: ", raw.post_alias(conn, actions).json())
+
+
 def repoint_alias(old_conn, new_conn, alias):
     actions = raw.to_alias_actions(add=[{"alias": alias, "index": new_conn.index}],
                                    remove=[{"alias": alias, "index": old_conn.index}])
     print("Alias re-point reply: ", raw.post_alias(new_conn, actions).json())
 
+
+def repoint_alias_index_type(old_conn, new_conn, alias, t):
+    old_index = raw.type_to_index(old_conn, t)
+    new_index = raw.type_to_index(new_conn, t)
+    actions = raw.to_alias_actions(add=[{"alias": alias, "index": new_index}],
+                                   remove=[{"alias": alias, "index": old_index}])
+    print("Alias re-point reply: ", raw.post_alias(new_conn, actions).json())
 
 def reindex(old_conn, new_conn, alias, types, new_mappings=None, new_version="0.90.13"):
     """
@@ -292,9 +303,10 @@ def reindex(old_conn, new_conn, alias, types, new_mappings=None, new_version="0.
     """
 
     # Ensure the old index is available via alias, and the new one is not
-    if raw.alias_exists(new_conn, alias):
-        raise Exception("Alias incorrectly set - check you have the connections the right way around.")
-    elif not raw.alias_exists(old_conn, alias):
+    if not new_conn.index_per_type:
+        if raw.alias_exists(new_conn, alias):
+            raise Exception("Alias incorrectly set - check you have the connections the right way around.")
+    elif not old_conn.index_per_type and not raw.alias_exists(old_conn, alias):
         print("The specified alias {alias} does not exist for index {index}. Creating it.".format(alias=alias, index=old_conn.index))
         create_alias(old_conn, alias)
     else:
@@ -302,6 +314,13 @@ def reindex(old_conn, new_conn, alias, types, new_mappings=None, new_version="0.
 
     # Create a new index with the new mapping
     for t in types:
+        if new_conn.index_per_type:
+            if raw.alias_exists(new_conn, alias, t):
+                raise Exception("Alias incorrectly set - check you have the connections the right way around.")
+        elif old_conn.index_per_type and not raw.alias_exists(old_conn, alias, t):
+            print("The specified alias {alias} does not exist for index {index}. Creating it.".format(alias=alias,
+                                                                                                      index=old_conn.index))
+            create_alias_index_type(old_conn, alias, t)
         r = raw.put_mapping(new_conn, type=t, mapping=new_mappings[t], make_index=True, es_version=new_version)
         print("Creating ES Type+Mapping for {t}; status: {status_code}".format(t=t, status_code=r.status_code))
     print("Mapping OK")
@@ -316,8 +335,12 @@ def reindex(old_conn, new_conn, alias, types, new_mappings=None, new_version="0.
 
     time.sleep(1)
 
-    # Switch alias to point to second index
-    repoint_alias(old_conn, new_conn, alias)
+    if not old_conn.index_per_type:
+        # Switch alias to point to second index
+        repoint_alias(old_conn, new_conn, alias)
+    else:
+        for t in types:
+            repoint_alias_index_type(old_conn, new_conn, alias, t)
     print("Reindex complete.")
 
 
