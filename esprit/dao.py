@@ -506,7 +506,6 @@ class DomainObject(DAO):
 
             res = cls.query(q=q, **kwargs)
             rs = [r.get("_source") if "_source" in r else r.get("fields") for r in res.get("hits", {}).get("hits", [])]
-            # print counter, len(rs), res.get("hits", {}).get("total"), len(res.get("hits", {}).get("hits", [])), json.dumps(q)
             if len(rs) == 0:
                 break
             for r in rs:
@@ -527,9 +526,11 @@ class DomainObject(DAO):
     @classmethod
     def count(cls, q, **kwargs):
         q = deepcopy(q)
+        if q.get('sort', None):
+            del q['sort']
         q["size"] = 0
         res = cls.query(q=q, **kwargs)
-        return res.get("hits", {}).get("total")
+        return res.get("hits", {}).get("total", {}).get("value", 0)
 
     @classmethod
     def scroll(cls, q=None, page_size=1000, limit=None, keepalive="10m", conn=None, raise_on_scroll_error=True, types=None, wrap=True):
@@ -539,6 +540,9 @@ class DomainObject(DAO):
 
         if q is None:
             q = {"query": {"match_all": {}}}
+
+        if cls.count(q, types=types) < 1:
+            return
 
         gen = tasks.scroll(conn, types, q, page_size=page_size, limit=limit, keepalive=keepalive)
 

@@ -24,7 +24,7 @@ class IndexPerTypeException(Exception):
 DEFAULT_VERSION = "0.90.13"
 
 # This is the type used when we are using the index-per type mapping pattern (ES < 7.0)
-INDEX_PER_TYPE_SUBSTITUTE = 'doc'
+INDEX_PER_TYPE_SUBSTITUTE = '_doc'
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +83,7 @@ def elasticsearch_url(connection, type=None, endpoint=None, params=None, omit_in
             type = ''
         elif endpoint == '_mapping':
             type = ''
-            endpoint = endpoint + '/' + INDEX_PER_TYPE_SUBSTITUTE
+            endpoint = endpoint
         else:
             type = INDEX_PER_TYPE_SUBSTITUTE
 
@@ -142,6 +142,7 @@ def _do_head(url, conn, **kwargs):
             kwargs = {}
         kwargs["auth"] = conn.auth
     kwargs["verify"] = conn.verify_ssl
+    kwargs["headers"] = {'Content-Type': 'application/json'}
     return requests.head(url, **kwargs)
 
 
@@ -151,6 +152,7 @@ def _do_get(url, conn, **kwargs):
             kwargs = {}
         kwargs["auth"] = conn.auth
     kwargs["verify"] = conn.verify_ssl
+    kwargs["headers"] = {'Content-Type': 'application/json'}
     return requests.get(url, **kwargs)
 
 
@@ -160,6 +162,7 @@ def _do_post(url, conn, data=None, **kwargs):
             kwargs = {}
         kwargs["auth"] = conn.auth
     kwargs["verify"] = conn.verify_ssl
+    kwargs["headers"] = {'Content-Type': 'application/json'}
     return requests.post(url, data, **kwargs)
 
 
@@ -169,6 +172,7 @@ def _do_put(url, conn, data=None, **kwargs):
             kwargs = {}
         kwargs["auth"] = conn.auth
     kwargs["verify"] = conn.verify_ssl
+    kwargs["headers"] = {'Content-Type': 'application/json'}
     return requests.put(url, data, **kwargs)
 
 
@@ -178,6 +182,7 @@ def _do_delete(url, conn, **kwargs):
             kwargs = {}
         kwargs["auth"] = conn.auth
     kwargs["verify"] = conn.verify_ssl
+    kwargs["headers"] = {'Content-Type': 'application/json'}
     return requests.delete(url, **kwargs)
 
 
@@ -312,7 +317,7 @@ def unpack_mget(requests_response):
 
 def total_results(requests_response):
     j = requests_response.json()
-    return j.get("hits", {}).get("total", 0)
+    return j.get("hits", {}).get("total", {}).get("value", 0)
 
 ####################################################################
 # Mappings
@@ -361,7 +366,7 @@ def type_exists(connection, type, es_version=DEFAULT_VERSION):
 
 def index_exists(connection, type=None):
     iurl = elasticsearch_url(connection, type, endpoint="")
-    resp = _do_get(iurl, connection)
+    resp = _do_head(iurl, connection)
     return resp.status_code == 200
 
 
@@ -384,13 +389,7 @@ def create_index(connection, type=None, mapping=None, es_version=DEFAULT_VERSION
 
 def _do_create_index(connection, iurl, mapping, es_version):
     method = _do_put
-    if versions.create_with_mapping_post(es_version):
-        method = _do_post
-
-    if mapping is None:
-        mapping = {}
-        resp = method(iurl, connection)
-    resp = method(iurl, connection, data=json.dumps(mapping))
+    resp = method(iurl, connection)
     logger.debug(resp.text)
     if resp.status_code < 200 or resp.status_code >= 400:
         raise ESWireException(resp)
@@ -406,7 +405,6 @@ def list_indexes(connection):
 
 
 def delete_index_by_prefix(conn, index_prefix):
-    # print('In esprit raw delete_index_by_prefix')
     """
     Delete all indexes starting with the given prefix. Remember that a complete match will also result in a delete, i.e.
     you may wish to include the separator so you don't delete too much (index_prefix='prefix-') so you don't delete

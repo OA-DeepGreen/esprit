@@ -1,12 +1,13 @@
 EXACT = {
-    "default": {
-        "match": "*",
+    "strings": {
         "match_mapping_type": "string",
         "mapping": {
-            "type": "multi_field",
+            "type": "text",
             "fields": {
-                "{name}": {"type": "{dynamic_type}", "index": "analyzed", "store": "no"},
-                "exact": {"type": "{dynamic_type}", "index": "not_analyzed", "store": "yes"}
+                "exact": {
+                    "type": "keyword",
+                    "normalizer": "lowercase"
+                }
             }
         }
     }

@@ -361,7 +361,7 @@ def compare_index_counts(conns, types, q=None):
         for c in conns:
             resp = raw.search(connection=c, type=t, query=q)
             try:
-                count = resp.json()["hits"]["total"]
+                count = resp.json()["hits"]["total"]["value"]
                 counts.append(count)
                 print("index {index}: {count}".format(index=c.index, count=count))
             except KeyError:
