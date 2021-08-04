@@ -1,8 +1,8 @@
 # The Raw ElasticSearch functions, no frills, just wrappers around the HTTP calls
 
-import requests, json, urllib.request, urllib.parse, urllib.error
+import requests, json, urllib.request, urllib.parse, urllib.error, logging
 from .models import QueryBuilder
-from esprit import versions
+from . import versions
 
 
 class ESWireException(Exception):
@@ -17,19 +17,39 @@ class BulkException(Exception):
     pass
 
 
+class IndexPerTypeException(Exception):
+    pass
+
+
 DEFAULT_VERSION = "0.90.13"
+
+# This is the type used when we are using the index-per type mapping pattern (ES < 7.0)
+INDEX_PER_TYPE_SUBSTITUTE = '_doc'
+
+logger = logging.getLogger(__name__)
+
+
+def configure_logging(loglevel: int = logging.WARNING):
+    logger.setLevel(loglevel)
+    handler = logging.StreamHandler()
+    handler.setLevel(loglevel)
+    formatter = logging.Formatter('%(name)s:%(lineno)s - %(levelname)s - %(funcName)s(): %(message)s')
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
 
 
 ##################################################################
 # Connection to the index
 
 class Connection(object):
-    def __init__(self, host, index, port=9200, auth=None, verify_ssl=True):
+    def __init__(self, host, index, port=9200, auth=None, verify_ssl=True, index_per_type=False):
+        """ Initialise a connection to an ES index. """
         self.host = host
         self.index = index
         self.port = port
         self.auth = auth
         self.verify_ssl = verify_ssl
+        self.index_per_type = index_per_type
 
         # make sure that host starts with "http://" or equivalent
         if not self.host.startswith("http"):
@@ -41,10 +61,10 @@ class Connection(object):
             self.host = self.host[:self.host.rindex(":")]
 
 
-def make_connection(connection, host, port, index, auth=None):
+def make_connection(connection, host, port, index, auth=None, index_per_type=False):
     if connection is not None:
         return connection
-    return Connection(host, index, port, auth)
+    return Connection(host, index, port, auth, index_per_type=index_per_type)
 
 
 ####################################################################
@@ -54,6 +74,18 @@ def elasticsearch_url(connection, type=None, endpoint=None, params=None, omit_in
     index = connection.index
     host = connection.host
     port = connection.port
+
+    # Re-create the connection if we are using index-per-type
+    if type is not None and connection.index_per_type:
+        index = type_to_index(connection, type)
+        # Set the type to the default dummy type
+        if not endpoint:
+            type = ''
+        elif endpoint == '_mapping':
+            type = ''
+            endpoint = endpoint
+        else:
+            type = INDEX_PER_TYPE_SUBSTITUTE
 
     # normalise the indexes input
     if omit_index:
@@ -81,7 +113,9 @@ def elasticsearch_url(connection, type=None, endpoint=None, params=None, omit_in
 
     url = host + index
     if type is not None and type != "":
-        url += "/" + type
+        if not url.endswith('/'):
+            url += '/'
+        url += type
 
     if endpoint is not None:
         if not url.endswith("/"):
@@ -108,6 +142,7 @@ def _do_head(url, conn, **kwargs):
             kwargs = {}
         kwargs["auth"] = conn.auth
     kwargs["verify"] = conn.verify_ssl
+    kwargs["headers"] = {'Content-Type': 'application/json'}
     return requests.head(url, **kwargs)
 
 
@@ -117,6 +152,7 @@ def _do_get(url, conn, **kwargs):
             kwargs = {}
         kwargs["auth"] = conn.auth
     kwargs["verify"] = conn.verify_ssl
+    kwargs["headers"] = {'Content-Type': 'application/json'}
     return requests.get(url, **kwargs)
 
 
@@ -126,6 +162,7 @@ def _do_post(url, conn, data=None, **kwargs):
             kwargs = {}
         kwargs["auth"] = conn.auth
     kwargs["verify"] = conn.verify_ssl
+    kwargs["headers"] = {'Content-Type': 'application/json'}
     return requests.post(url, data, **kwargs)
 
 
@@ -135,6 +172,7 @@ def _do_put(url, conn, data=None, **kwargs):
             kwargs = {}
         kwargs["auth"] = conn.auth
     kwargs["verify"] = conn.verify_ssl
+    kwargs["headers"] = {'Content-Type': 'application/json'}
     return requests.put(url, data, **kwargs)
 
 
@@ -144,6 +182,7 @@ def _do_delete(url, conn, **kwargs):
             kwargs = {}
         kwargs["auth"] = conn.auth
     kwargs["verify"] = conn.verify_ssl
+    kwargs["headers"] = {'Content-Type': 'application/json'}
     return requests.delete(url, **kwargs)
 
 
@@ -215,8 +254,6 @@ def get_facet_terms(json_result, facet_name):
 #################################################################
 # Scroll search
 
-# 2018-12-19 TD : raise default keepalive value to '10m'
-#def initialise_scroll(connection, type=None, query=None, keepalive="1m", scan=False):
 def initialise_scroll(connection, type=None, query=None, keepalive="10m", scan=False):
     url_params = {"scroll": keepalive}
     if scan:
@@ -224,8 +261,6 @@ def initialise_scroll(connection, type=None, query=None, keepalive="10m", scan=F
     return search(connection, type, query, url_params=url_params)
 
 
-# 2018-12-19 TD : see simply previous comment
-# def scroll_next(connection, scroll_id, keepalive="1m"):
 def scroll_next(connection, scroll_id, keepalive="10m"):
     url = elasticsearch_url(connection, endpoint="_search/scroll", params={"scroll_id": scroll_id, "scroll": keepalive},
                             omit_index=True)
@@ -282,7 +317,7 @@ def unpack_mget(requests_response):
 
 def total_results(requests_response):
     j = requests_response.json()
-    return j.get("hits", {}).get("total", 0)
+    return j.get("hits", {}).get("total", {}).get("value", 0)
 
 ####################################################################
 # Mappings
@@ -292,47 +327,35 @@ def put_mapping(connection, type=None, mapping=None, make_index=True, es_version
     if mapping is None:
         raise ESWireException("cannot put empty mapping")
 
-    if not index_exists(connection):
+    if not index_exists(connection, type):
         if make_index:
-            create_index(connection, es_version=es_version)
+            create_index(connection, type, mapping={}, es_version=es_version)
         else:
-            raise ESWireException("index '" + str(connection.index) + "' does not exist")
+            raise ESWireException("index '" + str(connection.index) + "' with type '" + type + "' does not exist")
 
-    if versions.mapping_url_0x(es_version):
-        url = elasticsearch_url(connection, type, "_mapping")
-        r = _do_put(url, connection, json.dumps(mapping))
-        return r
-    else:
-        url = elasticsearch_url(connection, "_mapping", type)
-        r = _do_put(url, connection, json.dumps(mapping))
-        return r
+    url = elasticsearch_url(connection, type=type, endpoint="_mapping")
+    r = _do_put(url, connection, json.dumps(mapping))
+    return r
 
 
 def has_mapping(connection, type, es_version=DEFAULT_VERSION):
-    if versions.mapping_url_0x(es_version):
-        url = elasticsearch_url(connection, type, endpoint="_mapping")
-        resp = _do_get(url, connection)
-        return resp.status_code == 200
-    else:
-        url = elasticsearch_url(connection, "_mapping", type)
-        resp = _do_get(url, connection)
-        return resp.status_code == 200
+    resp = get_mapping(connection, type, es_version=DEFAULT_VERSION)
+    return resp.status_code == 200
 
 
 def get_mapping(connection, type, es_version=DEFAULT_VERSION):
-    if versions.mapping_url_0x(es_version):
-        url = elasticsearch_url(connection, type, endpoint="_mapping")
-        resp = _do_get(url, connection)
-        return resp
-    else:
-        url = elasticsearch_url(connection, "_mapping", type)
-        resp = _do_get(url, connection)
-        return resp
+    url = elasticsearch_url(connection, type, endpoint="_mapping")
+    resp = _do_get(url, connection)
+    return resp
+
 
 ##########################################################
 # Existence checks
 
 def type_exists(connection, type, es_version=DEFAULT_VERSION):
+    if connection.index_per_type:
+        return index_exists(connection, type)
+
     url = elasticsearch_url(connection, type)
     if versions.type_get(es_version):
         resp = _do_get(url, connection)
@@ -341,16 +364,16 @@ def type_exists(connection, type, es_version=DEFAULT_VERSION):
     return resp.status_code == 200
 
 
-def index_exists(connection):
-    iurl = elasticsearch_url(connection, endpoint="_mapping")
-    resp = _do_get(iurl, connection)
+def index_exists(connection, type=None):
+    iurl = elasticsearch_url(connection, type, endpoint="")
+    resp = _do_head(iurl, connection)
     return resp.status_code == 200
 
 
-def alias_exists(connection, alias):
-    aurl = elasticsearch_url(connection, endpoint="_aliases")
+def alias_exists(connection, alias, type=None):
+    aurl = elasticsearch_url(connection, type=type, endpoint="_aliases")
     resp = _do_get(aurl, connection)
-    if index_exists(connection):
+    if index_exists(connection, type):
         return alias in list(resp.json()[connection.index]['aliases'].keys())
     else:
         return False
@@ -359,22 +382,47 @@ def alias_exists(connection, alias):
 ###########################################################
 # Index create
 
-def create_index(connection, mapping=None, es_version=DEFAULT_VERSION):
-    iurl = elasticsearch_url(connection)
+def create_index(connection, type=None, mapping=None, es_version=DEFAULT_VERSION):
+    iurl = elasticsearch_url(connection, type=type)
+    return _do_create_index(connection, iurl, mapping, es_version)
 
+
+def _do_create_index(connection, iurl, mapping, es_version):
     method = _do_put
-    if versions.create_with_mapping_post(es_version):
-        method = _do_post
-
-    if mapping is None:
-        resp = method(iurl, connection)
-    else:
-        resp = method(iurl, connection, data=json.dumps(mapping))
-
+    resp = method(iurl, connection)
+    logger.debug(resp.text)
     if resp.status_code < 200 or resp.status_code >= 400:
         raise ESWireException(resp)
     return resp
 
+
+# List and Delete indexes
+
+def list_indexes(connection):
+    url = elasticsearch_url(connection, endpoint='_status', omit_index=True)
+    resp = _do_get(url, connection)
+    return list(resp.json().get('indices').keys())
+
+
+def delete_index_by_prefix(conn, index_prefix):
+    """
+    Delete all indexes starting with the given prefix. Remember that a complete match will also result in a delete, i.e.
+    you may wish to include the separator so you don't delete too much (index_prefix='prefix-') so you don't delete
+    an index just called 'prefix'.
+    """
+    indexes = [i for i in list_indexes(connection=conn) if i.startswith(index_prefix)]
+
+    # Create a new Connection instance for the delete with all of the matching indexes
+    del_conn = Connection(conn.host, index_prefix, conn.port, conn.auth, conn.verify_ssl)
+    url = elasticsearch_url(del_conn)
+    resp = _do_delete(url, del_conn)
+    return resp
+
+
+def delete_index(conn, type=None):
+    url = elasticsearch_url(conn, type=type)
+    resp = _do_delete(url, conn)
+    return resp
 
 ############################################################
 # Store records
@@ -467,8 +515,8 @@ def bulk_delete(connection, type, ids):
 ##############################################################
 # Refresh
 
-def refresh(connection):
-    url = elasticsearch_url(connection, endpoint="_refresh")
+def refresh(connection, type):
+    url = elasticsearch_url(connection, type=type, endpoint="_refresh")
     resp = _do_post(url, connection)
     return resp
 
@@ -499,9 +547,29 @@ def post_alias(connection, alias_actions):
 ##############################################################
 # List types
 
-
 def list_types(connection):
+    if connection.index_per_type:
+        raise IndexPerTypeException('list_types is meaningless for index-per-type connections. '
+                                    'The only type is {0}'.format(INDEX_PER_TYPE_SUBSTITUTE))
+
     url = elasticsearch_url(connection, "_mapping")
     resp = _do_get(url, connection).json()
     index = list(resp.keys())[0]
     return list(resp[index]['mappings'].keys())
+
+
+###############################################################
+# Support for index-per-type
+
+def type_to_index(connection, typ):
+    if typ is not None:
+        if type(typ) != list:
+            typ = [typ]
+        new_index = []
+        old_index = connection.index
+        if type(old_index) != list:
+            old_index = [old_index]
+        for i in old_index:
+            new_index += ['{0}-{1}'.format(i, t) for t in list(typ)]
+        return new_index
+    return connection.index
