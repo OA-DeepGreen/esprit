@@ -1,8 +1,9 @@
 *.pyc
-*.egg-info/*
+*.egg-info
 .*.swp
 src*
 .Python
 build/*
 dist/*
 .idea/
+scratch.py
