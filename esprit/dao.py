@@ -308,7 +308,7 @@ class DomainObject(DAO):
             res = r.json()
             total = res.get('hits',{}).get('total',{}).get('value', 0)
             n_from += size
-            for hit in res['hits']['hits']:
+            for hit in res.get('hits', {}).get('hits', []):
                 if return_as_object:
                     obj_id = hit.get('_source', {}).get('id', None)
                     if obj_id:
