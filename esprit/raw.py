@@ -222,6 +222,8 @@ def data(connection, type=None, query=None, fmt="csv", method="POST", url_params
 
 def search(connection, type=None, query=None, method="POST", url_params=None):
     url = elasticsearch_url(connection, type, "_search", url_params)
+    if "_doc/" in url:
+        url = url.replace("_doc/", '')
 
     if query is None:
         query = QueryBuilder.match_all()
