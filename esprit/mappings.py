@@ -13,6 +13,17 @@ EXACT = {
     }
 }
 
+NESTED = {
+    "objects": {
+        "match": "*",
+        "match_mapping_type" : "object",
+        "mapping": {
+            "type": "nested",
+        }
+    }
+}
+
+
 
 def properties(field_mappings):
     return {"properties": field_mappings}
@@ -95,6 +106,12 @@ def mappings(typ):
 
 
 def default_mapping():
-    default_mapping = properties(type_mapping("location", "geo_point"))
-    default_mapping.update(dynamic_templates([EXACT,]))
-    return default_mapping
+    mapping = properties(type_mapping("location", "geo_point"))
+    mapping.update(dynamic_templates([EXACT,]))
+    return mapping
+
+
+def default_nested_mapping():
+    nested_mapping = properties(type_mapping("location", "geo_point"))
+    nested_mapping.update(dynamic_templates([EXACT, NESTED]))
+    return nested_mapping
