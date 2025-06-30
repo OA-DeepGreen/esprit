@@ -24,7 +24,7 @@ class IndexPerTypeException(Exception):
 DEFAULT_VERSION = "0.90.13"
 
 # This is the type used when we are using the index-per type mapping pattern (ES < 7.0)
-INDEX_PER_TYPE_SUBSTITUTE = '_doc'
+INDEX_PER_TYPE_SUBSTITUTE = ''
 
 logger = logging.getLogger(__name__)
 
@@ -222,8 +222,6 @@ def data(connection, type=None, query=None, fmt="csv", method="POST", url_params
 
 def search(connection, type=None, query=None, method="POST", url_params=None):
     url = elasticsearch_url(connection, type, "_search", url_params)
-    if "_doc/" in url:
-        url = url.replace("_doc/", '')
 
     if query is None:
         query = QueryBuilder.match_all()
@@ -286,7 +284,7 @@ def unpack_scroll(requests_response):
 # Record retrieval
 
 def get(connection, type, id):
-    url = elasticsearch_url(connection, type, endpoint=id)
+    url = elasticsearch_url(connection, type, endpoint=f"_doc/{id}")
     resp = _do_get(url, connection)
     return resp
 
@@ -430,7 +428,7 @@ def delete_index(conn, type=None):
 # Store records
 
 def store(connection, type, record, id=None, params=None):
-    url = elasticsearch_url(connection, type, endpoint=id, params=params)
+    url = elasticsearch_url(connection, type, endpoint=f"_doc/{id}", params=params)
     if id is not None:
         resp = _do_put(url, connection, data=json.dumps(record))
     else:
@@ -486,7 +484,7 @@ def raw_bulk(connection, data, type=""):
 # Delete records
 
 def delete(connection, type=None, id=None):
-    url = elasticsearch_url(connection, type, endpoint=id)
+    url = elasticsearch_url(connection, type, endpoint=f"_doc/{id}")
     resp = _do_delete(url, connection)
     return resp
 
